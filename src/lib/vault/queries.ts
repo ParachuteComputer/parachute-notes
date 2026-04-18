@@ -149,6 +149,23 @@ export function useLinkAttachment() {
   });
 }
 
+export function useDeleteAttachment() {
+  const client = useActiveVaultClient();
+  const activeId = useVaultStore((s) => s.activeVaultId);
+  const qc = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (args: { noteId: string; attachmentId: string }) => {
+      if (!client) throw new Error("No active vault");
+      await client.deleteAttachment(args.noteId, args.attachmentId);
+      return args;
+    },
+    onSuccess: (args) => {
+      qc.invalidateQueries({ queryKey: ["note", activeId, args.noteId] });
+    },
+  });
+}
+
 export function useDeleteNote() {
   const client = useActiveVaultClient();
   const activeId = useVaultStore((s) => s.activeVaultId);

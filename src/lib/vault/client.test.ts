@@ -1,5 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
-import { VaultAuthError, VaultClient, VaultConflictError, VaultUploadError } from "./client";
+import {
+  VaultAuthError,
+  VaultClient,
+  VaultConflictError,
+  VaultNotFoundError,
+  VaultUploadError,
+} from "./client";
 
 function mockFetch(response: { ok?: boolean; status?: number; json?: unknown; text?: string }) {
   return vi.fn<typeof fetch>(async () => {
@@ -479,6 +485,41 @@ describe("VaultClient", () => {
     await expect(
       client.linkAttachment("note-a", { path: "x", mimeType: "image/png" }),
     ).rejects.toBeInstanceOf(VaultAuthError);
+  });
+
+  it("deleteAttachment sends DELETE to /api/notes/:id/attachments/:attId and resolves void", async () => {
+    const fetchImpl = mockFetch({ status: 204 });
+    const client = new VaultClient({
+      vaultUrl: "http://localhost:1940",
+      accessToken: "pvt_abc",
+      fetchImpl,
+    });
+    await expect(client.deleteAttachment("note-a", "att-1")).resolves.toBeUndefined();
+    const call = fetchImpl.mock.calls[0];
+    expect(call?.[0]).toBe("http://localhost:1940/api/notes/note-a/attachments/att-1");
+    expect((call?.[1] as RequestInit).method).toBe("DELETE");
+  });
+
+  it("deleteAttachment throws VaultNotFoundError on 404 so callers can treat it as already-removed", async () => {
+    const fetchImpl = mockFetch({ ok: false, status: 404 });
+    const client = new VaultClient({
+      vaultUrl: "http://localhost:1940",
+      accessToken: "pvt_abc",
+      fetchImpl,
+    });
+    await expect(client.deleteAttachment("note-a", "att-1")).rejects.toBeInstanceOf(
+      VaultNotFoundError,
+    );
+  });
+
+  it("deleteAttachment propagates 401 as VaultAuthError", async () => {
+    const fetchImpl = mockFetch({ ok: false, status: 401 });
+    const client = new VaultClient({
+      vaultUrl: "http://localhost:1940",
+      accessToken: "pvt_abc",
+      fetchImpl,
+    });
+    await expect(client.deleteAttachment("note-a", "att-1")).rejects.toBeInstanceOf(VaultAuthError);
   });
 
   it("listTags hits /api/tags and returns the summary array", async () => {

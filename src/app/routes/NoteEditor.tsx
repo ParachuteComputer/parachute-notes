@@ -5,6 +5,7 @@ import type { CodeMirrorEditorHandle } from "@/components/CodeMirrorEditor";
 import { CodeMirrorEditor } from "@/components/CodeMirrorEditor";
 import { DeleteNoteButton } from "@/components/DeleteNoteButton";
 import { MarkdownView, buildWikilinkResolver } from "@/components/MarkdownView";
+import { RemoveAttachmentButton } from "@/components/RemoveAttachmentButton";
 import { TagEditor, normalizeTag } from "@/components/TagEditor";
 import { useAttachmentUploader } from "@/components/useAttachmentUploader";
 import { relativeTime } from "@/lib/time";
@@ -287,6 +288,7 @@ function EditorSurface({ note }: { note: Note }) {
       </div>
 
       <AttachmentsSection
+        noteId={note.id}
         attachments={note.attachments ?? []}
         uploads={uploader.uploads}
         onPickFiles={uploader.start}
@@ -312,12 +314,14 @@ const ALLOWLIST_HINT = (
 );
 
 function AttachmentsSection({
+  noteId,
   attachments,
   uploads,
   onPickFiles,
   onCancel,
   onDismiss,
 }: {
+  noteId: string;
   attachments: NoteAttachment[];
   uploads: ReturnType<typeof useAttachmentUploader>["uploads"];
   onPickFiles: (files: File[]) => void;
@@ -344,7 +348,10 @@ function AttachmentsSection({
               <span className="truncate" title={a.path ?? a.id}>
                 {a.filename ?? a.path ?? a.id}
               </span>
-              {a.mimeType ? <span className="shrink-0 text-fg-dim">{a.mimeType}</span> : null}
+              <div className="flex shrink-0 items-center gap-2">
+                {a.mimeType ? <span className="text-fg-dim">{a.mimeType}</span> : null}
+                <RemoveAttachmentButton noteId={noteId} attachment={a} />
+              </div>
             </li>
           ))}
         </ul>

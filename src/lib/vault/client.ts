@@ -48,6 +48,13 @@ export class VaultAuthError extends Error {
   }
 }
 
+export class VaultNotFoundError extends Error {
+  constructor(message = "Not found") {
+    super(message);
+    this.name = "VaultNotFoundError";
+  }
+}
+
 export class VaultConflictError extends Error {
   readonly currentUpdatedAt: string | null;
   readonly expectedUpdatedAt: string | null;
@@ -107,6 +114,9 @@ export class VaultClient {
 
     if (res.status === 401 || res.status === 403) {
       throw new VaultAuthError(`Vault rejected the token (${res.status})`);
+    }
+    if (res.status === 404) {
+      throw new VaultNotFoundError(`${init.method ?? "GET"} ${path} → 404`);
     }
     if (res.status === 409) {
       const body = (await res.json().catch(() => ({}))) as {
@@ -243,6 +253,13 @@ export class VaultClient {
   async listAttachments(noteIdOrPath: string): Promise<NoteAttachment[]> {
     return this.request<NoteAttachment[]>(
       `/api/notes/${encodeURIComponent(noteIdOrPath)}/attachments`,
+    );
+  }
+
+  async deleteAttachment(noteIdOrPath: string, attachmentId: string): Promise<void> {
+    await this.request<undefined>(
+      `/api/notes/${encodeURIComponent(noteIdOrPath)}/attachments/${encodeURIComponent(attachmentId)}`,
+      { method: "DELETE" },
     );
   }
 
