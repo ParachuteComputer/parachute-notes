@@ -30,6 +30,12 @@ export function Header() {
         <div className="flex items-center gap-3">
           {hasVaults ? (
             <>
+              <Link to="/notes" className="text-sm text-fg-muted hover:text-accent">
+                Notes
+              </Link>
+              <Link to="/graph" className="text-sm text-fg-muted hover:text-accent">
+                Graph
+              </Link>
               <label htmlFor="vault-switcher" className="sr-only">
                 Active vault
               </label>

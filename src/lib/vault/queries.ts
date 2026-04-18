@@ -48,6 +48,28 @@ export function useNotes(queryState: NoteQueryState) {
   });
 }
 
+// Cap on how many notes to pull back for the full-vault graph in v1.
+// If a vault grows beyond this, the graph page will show the first N —
+// pagination/sampling is a future PR.
+export const VAULT_GRAPH_NOTE_CAP = 5000;
+
+export function useAllNotesWithLinks() {
+  const client = useActiveVaultClient();
+  const activeId = useVaultStore((s) => s.activeVaultId);
+
+  return useQuery({
+    queryKey: ["allNotesWithLinks", activeId],
+    enabled: !!client,
+    queryFn: () => {
+      const params = new URLSearchParams();
+      params.set("include_links", "true");
+      params.set("limit", String(VAULT_GRAPH_NOTE_CAP));
+      return client!.queryNotes(params);
+    },
+    staleTime: 60_000,
+  });
+}
+
 export function useTags() {
   const client = useActiveVaultClient();
   const activeId = useVaultStore((s) => s.activeVaultId);
