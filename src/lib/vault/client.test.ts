@@ -57,4 +57,52 @@ describe("VaultClient", () => {
     await client.vaultInfo(false);
     expect(fetchImpl.mock.calls[0]?.[0]).toBe("http://localhost:1940/api/vault");
   });
+
+  it("queryNotes passes URLSearchParams to /api/notes and parses the array", async () => {
+    const fetchImpl = mockFetch({
+      json: [{ id: "a", createdAt: "2026-04-18T00:00:00Z", tags: ["daily"] }],
+    });
+    const client = new VaultClient({
+      vaultUrl: "http://localhost:1940",
+      accessToken: "pvt_abc",
+      fetchImpl,
+    });
+
+    const params = new URLSearchParams({ search: "hello", sort: "desc", limit: "50" });
+    const rows = await client.queryNotes(params);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.tags).toEqual(["daily"]);
+    expect(fetchImpl.mock.calls[0]?.[0]).toBe(
+      "http://localhost:1940/api/notes?search=hello&sort=desc&limit=50",
+    );
+  });
+
+  it("queryNotes omits the querystring entirely when params are empty", async () => {
+    const fetchImpl = mockFetch({ json: [] });
+    const client = new VaultClient({
+      vaultUrl: "http://localhost:1940",
+      accessToken: "pvt_abc",
+      fetchImpl,
+    });
+    await client.queryNotes(new URLSearchParams());
+    expect(fetchImpl.mock.calls[0]?.[0]).toBe("http://localhost:1940/api/notes");
+  });
+
+  it("listTags hits /api/tags and returns the summary array", async () => {
+    const fetchImpl = mockFetch({
+      json: [
+        { name: "daily", count: 42 },
+        { name: "work", count: 7 },
+      ],
+    });
+    const client = new VaultClient({
+      vaultUrl: "http://localhost:1940",
+      accessToken: "pvt_abc",
+      fetchImpl,
+    });
+    const tags = await client.listTags();
+    expect(tags).toHaveLength(2);
+    expect(tags[0]).toEqual({ name: "daily", count: 42 });
+    expect(fetchImpl.mock.calls[0]?.[0]).toBe("http://localhost:1940/api/tags");
+  });
 });

@@ -3,6 +3,7 @@ import { QueryProvider } from "@/providers/QueryProvider";
 import { BrowserRouter, Route, Routes } from "react-router";
 import { AddVault } from "./routes/AddVault";
 import { Home } from "./routes/Home";
+import { Notes } from "./routes/Notes";
 import { OAuthCallback } from "./routes/OAuthCallback";
 import { Vaults } from "./routes/Vaults";
 
@@ -15,6 +16,7 @@ export function App() {
           <main>
             <Routes>
               <Route path="/" element={<Home />} />
+              <Route path="/notes" element={<Notes />} />
               <Route path="/add" element={<AddVault />} />
               <Route path="/oauth/callback" element={<OAuthCallback />} />
               <Route path="/vaults" element={<Vaults />} />

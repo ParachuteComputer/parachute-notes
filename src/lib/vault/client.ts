@@ -1,4 +1,4 @@
-import type { VaultInfo } from "./types";
+import type { Note, TagSummary, VaultInfo } from "./types";
 
 export interface VaultClientOptions {
   vaultUrl: string;
@@ -48,5 +48,14 @@ export class VaultClient {
   async vaultInfo(includeStats = true): Promise<VaultInfo> {
     const query = includeStats ? "?include_stats=true" : "";
     return this.request<VaultInfo>(`/api/vault${query}`);
+  }
+
+  async queryNotes(params: URLSearchParams): Promise<Note[]> {
+    const qs = params.toString();
+    return this.request<Note[]>(`/api/notes${qs ? `?${qs}` : ""}`);
+  }
+
+  async listTags(): Promise<TagSummary[]> {
+    return this.request<TagSummary[]>("/api/tags");
   }
 }

@@ -52,6 +52,23 @@ export interface VaultInfo {
   };
 }
 
+export interface Note {
+  id: string;
+  path?: string;
+  createdAt: string;
+  updatedAt?: string;
+  tags?: string[];
+  metadata?: Record<string, unknown>;
+  preview?: string;
+  byteSize?: number;
+  content?: string;
+}
+
+export interface TagSummary {
+  name: string;
+  count: number;
+}
+
 export interface PendingOAuthState {
   vaultUrl: string;
   issuer: string;
