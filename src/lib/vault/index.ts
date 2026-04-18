@@ -1,5 +1,6 @@
 export * from "./client";
 export * from "./discovery";
+export * from "./neighborhood";
 export * from "./note-query";
 export * from "./oauth";
 export * from "./pkce";

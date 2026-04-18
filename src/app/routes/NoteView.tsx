@@ -1,5 +1,6 @@
 import { DeleteNoteButton } from "@/components/DeleteNoteButton";
 import { MarkdownView, buildWikilinkResolver } from "@/components/MarkdownView";
+import { NeighborhoodGraph } from "@/components/NeighborhoodGraph";
 import { relativeTime } from "@/lib/time";
 import { useActiveVaultClient, useNote, useVaultStore } from "@/lib/vault";
 import { VaultAuthError } from "@/lib/vault/client";
@@ -92,6 +93,8 @@ function NoteBody({ note }: { note: Note }) {
             </div>
           </section>
         ) : null}
+
+        <NeighborhoodGraph anchor={note} />
       </div>
 
       <aside className="space-y-6 text-sm lg:sticky lg:top-24 lg:self-start">
