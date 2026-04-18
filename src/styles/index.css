@@ -1,0 +1,48 @@
+@import url("https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,300;1,9..40,400&family=JetBrains+Mono:wght@400;500&display=swap");
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "DM Sans", -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-serif: "Instrument Serif", Georgia, serif;
+  --font-mono: "JetBrains Mono", "SF Mono", Monaco, monospace;
+
+  --color-bg: #faf8f4;
+  --color-bg-soft: #f3f0ea;
+  --color-fg: #2c2a26;
+  --color-fg-muted: #6b6860;
+  --color-fg-dim: #9a9690;
+  --color-accent: #4a7c59;
+  --color-accent-hover: #3d6849;
+  --color-accent-light: #6a9b77;
+  --color-sky: #5b8fa8;
+  --color-border: #e4e0d8;
+  --color-border-light: #ece9e2;
+  --color-card: #ffffff;
+  --color-card-hover: #fefdfb;
+}
+
+@media (prefers-color-scheme: dark) {
+  @theme {
+    --color-bg: #1a1917;
+    --color-bg-soft: #23221f;
+    --color-fg: #e8e5de;
+    --color-fg-muted: #a8a49b;
+    --color-fg-dim: #706c64;
+    --color-accent: #7ab087;
+    --color-accent-hover: #8bc098;
+    --color-accent-light: #5b8c6a;
+    --color-sky: #7fb3cc;
+    --color-border: #33312d;
+    --color-border-light: #2a2926;
+    --color-card: #23221f;
+    --color-card-hover: #2a2926;
+  }
+}
+
+html,
+body {
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  line-height: 1.65;
+}

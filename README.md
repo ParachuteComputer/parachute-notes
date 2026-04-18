@@ -36,6 +36,19 @@ bun run build
 # static output in dist/ — host anywhere
 ```
 
+## Development
+
+Vite + React 19 + TypeScript (strict), Tailwind CSS v4, Biome for lint/format, Vitest + Testing Library for tests.
+
+```sh
+bun run dev         # dev server
+bun run typecheck   # tsc --noEmit across the project references
+bun run lint        # biome check
+bun run lint:fix    # biome check --write
+bun run test        # vitest run
+bun run build       # tsc -b && vite build
+```
+
 ## License
 
 AGPL-3.0 — same as Parachute Vault.
