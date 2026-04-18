@@ -87,7 +87,7 @@ export class VaultClient {
   constructor(opts: VaultClientOptions) {
     this.baseUrl = opts.vaultUrl.replace(/\/$/, "");
     this.token = opts.accessToken;
-    this.fetchImpl = opts.fetchImpl ?? fetch;
+    this.fetchImpl = opts.fetchImpl ?? fetch.bind(globalThis);
     this.xhrFactory = opts.xhrFactory ?? (() => new XMLHttpRequest());
   }
 

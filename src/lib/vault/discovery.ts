@@ -13,7 +13,7 @@ const REQUIRED_FIELDS: (keyof AuthorizationServerMetadata)[] = [
  */
 export async function discoverAuthServer(
   vaultUrl: string,
-  fetchImpl: typeof fetch = fetch,
+  fetchImpl: typeof fetch = fetch.bind(globalThis),
 ): Promise<AuthorizationServerMetadata> {
   const metadataUrl = `${vaultUrl.replace(/\/$/, "")}/.well-known/oauth-authorization-server`;
 
@@ -49,7 +49,7 @@ export async function discoverAuthServer(
 export async function registerClient(
   registrationEndpoint: string,
   redirectUri: string,
-  fetchImpl: typeof fetch = fetch,
+  fetchImpl: typeof fetch = fetch.bind(globalThis),
 ): Promise<ClientRegistration> {
   const res = await fetchImpl(registrationEndpoint, {
     method: "POST",

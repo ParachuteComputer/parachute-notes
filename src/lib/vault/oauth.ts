@@ -21,7 +21,7 @@ export function redirectUriForOrigin(origin: string = window.location.origin): s
 export async function beginOAuth(
   rawUrl: string,
   scope: TokenScope = "full",
-  fetchImpl: typeof fetch = fetch,
+  fetchImpl: typeof fetch = fetch.bind(globalThis),
 ): Promise<{ authorizeUrl: string; pending: PendingOAuthState }> {
   const vaultUrl = normalizeVaultUrl(rawUrl);
   const redirectUri = redirectUriForOrigin();
@@ -65,7 +65,7 @@ export async function beginOAuth(
 export async function completeOAuth(
   code: string,
   state: string,
-  fetchImpl: typeof fetch = fetch,
+  fetchImpl: typeof fetch = fetch.bind(globalThis),
 ): Promise<{ pending: PendingOAuthState; token: TokenResponse }> {
   const pending = loadPendingOAuth();
   if (!pending) {
