@@ -499,3 +499,36 @@ describe("VaultClient", () => {
     expect(fetchImpl.mock.calls[0]?.[0]).toBe("http://localhost:1940/api/tags");
   });
 });
+
+describe("VaultClient default fetch binding", () => {
+  // Regression for "TypeError: Failed to execute 'fetch' on 'Window': Illegal invocation".
+  // Browser's native `fetch` requires its `this` receiver to be the global (Window).
+  // Storing `fetch` as a bare reference on an instance field loses that binding; at
+  // call-time `this` becomes the VaultClient instance and the browser throws.
+  // jsdom's fetch is permissive and doesn't enforce this invariant, so we install a
+  // this-aware shim here that mimics the browser check. This test exists to catch
+  // regressions in the default-path binding only — don't add one per endpoint.
+  it("does not throw 'Illegal invocation' when no fetchImpl is provided", async () => {
+    const shim = vi.fn(function (this: unknown, _url: string, _init?: RequestInit) {
+      if (this !== globalThis) {
+        throw new TypeError("Failed to execute 'fetch' on 'Window': Illegal invocation");
+      }
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        json: async () => ({ name: "default", description: "" }),
+        text: async () => "",
+      } as Response);
+    });
+    vi.stubGlobal("fetch", shim);
+    try {
+      const client = new VaultClient({
+        vaultUrl: "http://localhost:1940",
+        accessToken: "pvt_abc",
+      });
+      await expect(client.vaultInfo(false)).resolves.toBeDefined();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+});
