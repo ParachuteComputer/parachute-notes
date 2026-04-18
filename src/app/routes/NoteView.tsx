@@ -1,3 +1,4 @@
+import { DeleteNoteButton } from "@/components/DeleteNoteButton";
 import { MarkdownView, buildWikilinkResolver } from "@/components/MarkdownView";
 import { relativeTime } from "@/lib/time";
 import { useActiveVaultClient, useNote, useVaultStore } from "@/lib/vault";
@@ -75,14 +76,7 @@ function NoteBody({ note }: { note: Note }) {
             >
               Edit
             </Link>
-            <button
-              type="button"
-              disabled
-              className="rounded-md border border-border bg-card px-3 py-1.5 text-sm text-fg-dim opacity-50"
-              title="Delete lands in PR #6"
-            >
-              Delete
-            </button>
+            <DeleteNoteButton note={note} />
           </div>
         </header>
 

@@ -1,6 +1,6 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo } from "react";
-import { type UpdateNotePayload, VaultClient } from "./client";
+import { type CreateNotePayload, type UpdateNotePayload, VaultClient } from "./client";
 import { type NoteQueryState, buildNoteQueryParams } from "./note-query";
 import { loadToken } from "./storage";
 import { useVaultStore } from "./store";
@@ -83,6 +83,45 @@ export function useUpdateNote(id: string | undefined) {
       if (updated?.id && updated.id !== id) {
         qc.setQueryData(["note", activeId, updated.id], updated);
       }
+    },
+  });
+}
+
+export function useCreateNote() {
+  const client = useActiveVaultClient();
+  const activeId = useVaultStore((s) => s.activeVaultId);
+  const qc = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (payload: CreateNotePayload) => {
+      if (!client) throw new Error("No active vault");
+      return client.createNote(payload);
+    },
+    onSuccess: (created) => {
+      qc.setQueryData(["note", activeId, created.id], created);
+      qc.invalidateQueries({ queryKey: ["notes", activeId] });
+      qc.invalidateQueries({ queryKey: ["tags", activeId] });
+      qc.invalidateQueries({ queryKey: ["vaultInfo", activeId] });
+    },
+  });
+}
+
+export function useDeleteNote() {
+  const client = useActiveVaultClient();
+  const activeId = useVaultStore((s) => s.activeVaultId);
+  const qc = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (id: string) => {
+      if (!client) throw new Error("No active vault");
+      await client.deleteNote(id);
+      return id;
+    },
+    onSuccess: (id) => {
+      qc.removeQueries({ queryKey: ["note", activeId, id] });
+      qc.invalidateQueries({ queryKey: ["notes", activeId] });
+      qc.invalidateQueries({ queryKey: ["tags", activeId] });
+      qc.invalidateQueries({ queryKey: ["vaultInfo", activeId] });
     },
   });
 }

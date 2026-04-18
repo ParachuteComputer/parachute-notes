@@ -65,14 +65,22 @@ export function Notes() {
           <p className="text-xs uppercase tracking-wider text-fg-dim">{activeVault.name}</p>
           <h1 className="font-serif text-3xl tracking-tight">Notes</h1>
         </div>
-        <button
-          type="button"
-          onClick={() => setSort((s) => (s === "desc" ? "asc" : "desc"))}
-          className="text-sm text-fg-muted hover:text-accent"
-          aria-label="Toggle sort direction"
-        >
-          Sort: {sort === "desc" ? "newest" : "oldest"} first
-        </button>
+        <div className="flex items-center gap-4">
+          <button
+            type="button"
+            onClick={() => setSort((s) => (s === "desc" ? "asc" : "desc"))}
+            className="text-sm text-fg-muted hover:text-accent"
+            aria-label="Toggle sort direction"
+          >
+            Sort: {sort === "desc" ? "newest" : "oldest"} first
+          </button>
+          <Link
+            to="/new"
+            className="rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-white hover:bg-accent-hover"
+          >
+            New note
+          </Link>
+        </div>
       </header>
 
       <div className="mb-6 space-y-3">
@@ -303,8 +311,13 @@ function EmptyBlock({ filtering }: { filtering: boolean }) {
         <p className="text-fg-muted">No notes match these filters.</p>
       ) : (
         <>
-          <p className="mb-1 text-fg-muted">This vault has no notes yet.</p>
-          <p className="text-sm text-fg-dim">Creating notes lands in a later PR.</p>
+          <p className="mb-3 text-fg-muted">This vault has no notes yet.</p>
+          <Link
+            to="/new"
+            className="inline-block rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover"
+          >
+            Create one
+          </Link>
         </>
       )}
     </div>

@@ -36,6 +36,13 @@ export interface UpdateNotePayload {
   if_updated_at?: string;
 }
 
+export interface CreateNotePayload {
+  content: string;
+  path?: string;
+  tags?: string[];
+  metadata?: Record<string, unknown>;
+}
+
 export class VaultClient {
   private readonly baseUrl: string;
   private readonly token: string;
@@ -104,6 +111,20 @@ export class VaultClient {
       method: "PATCH",
       body: JSON.stringify(payload),
     });
+  }
+
+  async createNote(payload: CreateNotePayload): Promise<Note> {
+    return this.request<Note>("/api/notes", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async deleteNote(id: string): Promise<void> {
+    await this.request<{ deleted: boolean; id: string } | undefined>(
+      `/api/notes/${encodeURIComponent(id)}`,
+      { method: "DELETE" },
+    );
   }
 
   async listTags(): Promise<TagSummary[]> {

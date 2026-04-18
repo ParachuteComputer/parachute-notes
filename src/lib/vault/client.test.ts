@@ -215,6 +215,82 @@ describe("VaultClient", () => {
     await expect(client.updateNote("a", { content: "x" })).rejects.toBeInstanceOf(VaultAuthError);
   });
 
+  it("createNote POSTs JSON to /api/notes and returns the created note", async () => {
+    const fetchImpl = mockFetch({
+      status: 201,
+      json: {
+        id: "new-id",
+        path: "Projects/README",
+        createdAt: "2026-04-18T12:00:00Z",
+        content: "# hello",
+        tags: ["docs"],
+      },
+    });
+    const client = new VaultClient({
+      vaultUrl: "http://localhost:1940",
+      accessToken: "pvt_abc",
+      fetchImpl,
+    });
+
+    const note = await client.createNote({
+      content: "# hello",
+      path: "Projects/README",
+      tags: ["docs"],
+      metadata: { summary: "A readme" },
+    });
+
+    expect(note.id).toBe("new-id");
+    const call = fetchImpl.mock.calls[0];
+    expect(call?.[0]).toBe("http://localhost:1940/api/notes");
+    const init = call?.[1] as RequestInit;
+    expect(init.method).toBe("POST");
+    expect(new Headers(init.headers).get("Content-Type")).toBe("application/json");
+    const body = JSON.parse(init.body as string);
+    expect(body).toEqual({
+      content: "# hello",
+      path: "Projects/README",
+      tags: ["docs"],
+      metadata: { summary: "A readme" },
+    });
+  });
+
+  it("createNote surfaces a generic failure so callers can hint at duplicate paths", async () => {
+    const fetchImpl = mockFetch({
+      ok: false,
+      status: 500,
+      text: '{"error":"Internal server error"}',
+    });
+    const client = new VaultClient({
+      vaultUrl: "http://localhost:1940",
+      accessToken: "pvt_abc",
+      fetchImpl,
+    });
+    await expect(client.createNote({ content: "hi", path: "dup" })).rejects.toThrow(/500/);
+  });
+
+  it("deleteNote sends DELETE to /api/notes/:id and resolves void", async () => {
+    const fetchImpl = mockFetch({ json: { deleted: true, id: "abc" } });
+    const client = new VaultClient({
+      vaultUrl: "http://localhost:1940",
+      accessToken: "pvt_abc",
+      fetchImpl,
+    });
+    await expect(client.deleteNote("abc-123")).resolves.toBeUndefined();
+    const call = fetchImpl.mock.calls[0];
+    expect(call?.[0]).toBe("http://localhost:1940/api/notes/abc-123");
+    expect((call?.[1] as RequestInit).method).toBe("DELETE");
+  });
+
+  it("deleteNote propagates 401 as VaultAuthError", async () => {
+    const fetchImpl = mockFetch({ ok: false, status: 401 });
+    const client = new VaultClient({
+      vaultUrl: "http://localhost:1940",
+      accessToken: "pvt_abc",
+      fetchImpl,
+    });
+    await expect(client.deleteNote("abc")).rejects.toBeInstanceOf(VaultAuthError);
+  });
+
   it("listTags hits /api/tags and returns the summary array", async () => {
     const fetchImpl = mockFetch({
       json: [

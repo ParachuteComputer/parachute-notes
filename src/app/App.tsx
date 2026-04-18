@@ -1,9 +1,11 @@
 import { Header } from "@/components/Header";
+import { Toaster } from "@/components/Toaster";
 import { QueryProvider } from "@/providers/QueryProvider";
 import { BrowserRouter, Route, Routes } from "react-router";
 import { AddVault } from "./routes/AddVault";
 import { Home } from "./routes/Home";
 import { NoteEditor } from "./routes/NoteEditor";
+import { NoteNew } from "./routes/NoteNew";
 import { NoteView } from "./routes/NoteView";
 import { Notes } from "./routes/Notes";
 import { OAuthCallback } from "./routes/OAuthCallback";
@@ -14,11 +16,13 @@ export function App() {
     <QueryProvider>
       <BrowserRouter>
         <div className="min-h-dvh bg-bg text-fg">
+          <Toaster />
           <Header />
           <main>
             <Routes>
               <Route path="/" element={<Home />} />
               <Route path="/notes" element={<Notes />} />
+              <Route path="/new" element={<NoteNew />} />
               <Route path="/notes/:id" element={<NoteView />} />
               <Route path="/notes/:id/edit" element={<NoteEditor />} />
               <Route path="/add" element={<AddVault />} />

@@ -1,5 +1,7 @@
 import { CodeMirrorEditor } from "@/components/CodeMirrorEditor";
+import { DeleteNoteButton } from "@/components/DeleteNoteButton";
 import { MarkdownView, buildWikilinkResolver } from "@/components/MarkdownView";
+import { TagEditor, normalizeTag } from "@/components/TagEditor";
 import { relativeTime } from "@/lib/time";
 import { useNote, useUpdateNote, useVaultStore } from "@/lib/vault";
 import { type UpdateNotePayload, VaultAuthError, VaultConflictError } from "@/lib/vault/client";
@@ -136,7 +138,7 @@ function EditorSurface({ note }: { note: Note }) {
   const pathChanged = draft.path !== baseline.path;
 
   const addTag = (raw: string) => {
-    const t = raw.trim().replace(/^#/, "");
+    const t = normalizeTag(raw);
     if (!t) return;
     if (draft.tags.includes(t)) return;
     setDraft((d) => ({ ...d, tags: [...d.tags, t] }));
@@ -169,6 +171,8 @@ function EditorSurface({ note }: { note: Note }) {
             )}
           </div>
           <div className="flex items-center gap-2">
+            <DeleteNoteButton note={note} />
+            <span className="mx-1 h-5 w-px bg-border" aria-hidden="true" />
             <button
               type="button"
               onClick={handleRevert}
@@ -250,61 +254,6 @@ function EditorSurface({ note }: { note: Note }) {
         </div>
       </div>
     </article>
-  );
-}
-
-function TagEditor({
-  tags,
-  input,
-  onInputChange,
-  onAdd,
-  onRemove,
-}: {
-  tags: string[];
-  input: string;
-  onInputChange(v: string): void;
-  onAdd(raw: string): void;
-  onRemove(name: string): void;
-}) {
-  return (
-    <div className="flex flex-wrap items-center gap-1.5 text-sm">
-      <span className="shrink-0 text-xs uppercase tracking-wider text-fg-dim">Tags</span>
-      {tags.map((t) => (
-        <span
-          key={t}
-          className="inline-flex items-center gap-1 rounded-full border border-border bg-bg/60 px-2 py-0.5 text-xs text-fg-muted"
-        >
-          {t}
-          <button
-            type="button"
-            onClick={() => onRemove(t)}
-            aria-label={`Remove tag ${t}`}
-            className="text-fg-dim hover:text-red-400"
-          >
-            ×
-          </button>
-        </span>
-      ))}
-      <input
-        type="text"
-        value={input}
-        onChange={(e) => onInputChange(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" || e.key === ",") {
-            e.preventDefault();
-            onAdd(input);
-          } else if (e.key === "Backspace" && input === "" && tags.length > 0) {
-            onRemove(tags[tags.length - 1]!);
-          }
-        }}
-        onBlur={() => {
-          if (input.trim()) onAdd(input);
-        }}
-        placeholder="add tag…"
-        className="min-w-24 flex-1 rounded-md border border-transparent bg-transparent px-1 py-0.5 text-xs text-fg focus:border-border focus:outline-none"
-        aria-label="Add tag"
-      />
-    </div>
   );
 }
 
