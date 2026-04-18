@@ -1,4 +1,4 @@
-import { useVaultStore } from "@/lib/vault";
+import { type VaultRecord, useVaultStore } from "@/lib/vault";
 import { Link, useNavigate } from "react-router";
 
 export function Header() {
@@ -7,7 +7,17 @@ export function Header() {
   const activeVaultId = useVaultStore((s) => s.activeVaultId);
   const setActiveVault = useVaultStore((s) => s.setActiveVault);
 
-  const vaultList = Object.values(vaults).sort((a, b) => a.name.localeCompare(b.name));
+  const vaultLabel = (v: VaultRecord): string => {
+    if (v.name) return v.name;
+    try {
+      return new URL(v.url).host;
+    } catch {
+      return v.url;
+    }
+  };
+  const vaultList = Object.values(vaults).sort((a, b) =>
+    vaultLabel(a).localeCompare(vaultLabel(b)),
+  );
   const hasVaults = vaultList.length > 0;
 
   return (
@@ -31,7 +41,7 @@ export function Header() {
               >
                 {vaultList.map((v) => (
                   <option key={v.id} value={v.id}>
-                    {v.name}
+                    {vaultLabel(v)}
                   </option>
                 ))}
               </select>

@@ -49,6 +49,15 @@ bun run test        # vitest run
 bun run build       # tsc -b && vite build
 ```
 
+By default the dev server binds to localhost and rejects Host headers it
+doesn't recognize. Set `VITE_EXPOSE=true` to bind to all interfaces and accept
+any Host — useful when reaching the dev server from another device on your
+tailnet:
+
+```sh
+VITE_EXPOSE=true bun run dev
+```
+
 ## License
 
 AGPL-3.0 — same as Parachute Vault.
