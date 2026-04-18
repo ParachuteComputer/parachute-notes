@@ -1,12 +1,23 @@
+import { AttachmentDropZone } from "@/components/AttachmentDropZone";
+import { AttachmentPicker } from "@/components/AttachmentPicker";
+import { AttachmentUploadList } from "@/components/AttachmentUploadList";
+import type { CodeMirrorEditorHandle } from "@/components/CodeMirrorEditor";
 import { CodeMirrorEditor } from "@/components/CodeMirrorEditor";
 import { MarkdownView, buildWikilinkResolver } from "@/components/MarkdownView";
 import { TagEditor, normalizeTag } from "@/components/TagEditor";
+import { useAttachmentUploader } from "@/components/useAttachmentUploader";
 import { useToastStore } from "@/lib/toast/store";
-import { useCreateNote, useVaultStore } from "@/lib/vault";
+import { useCreateNote, useLinkAttachment, useVaultStore } from "@/lib/vault";
 import { type CreateNotePayload, VaultAuthError } from "@/lib/vault/client";
 import type { Note } from "@/lib/vault/types";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, Navigate, useNavigate } from "react-router";
+
+interface StagedUpload {
+  path: string;
+  mimeType: string;
+  filename: string;
+}
 
 interface DraftState {
   content: string;
@@ -22,9 +33,25 @@ export function NoteNew() {
   const navigate = useNavigate();
   const pushToast = useToastStore((s) => s.push);
   const mutation = useCreateNote();
+  const linkAttachment = useLinkAttachment();
   const [draft, setDraft] = useState<DraftState>(EMPTY_DRAFT);
   const [tagInput, setTagInput] = useState("");
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [staged, setStaged] = useState<StagedUpload[]>([]);
+  const editorRef = useRef<CodeMirrorEditorHandle>(null);
+
+  const uploader = useAttachmentUploader({
+    noteId: null,
+    onInsert: (md) => {
+      if (editorRef.current) {
+        editorRef.current.insertAtCursor(md);
+      } else {
+        setDraft((d) => ({ ...d, content: `${d.content}${md}` }));
+      }
+    },
+    onStaged: (s) => setStaged((prev) => [...prev, s]),
+    onError: (msg) => pushToast(msg, "error"),
+  });
 
   if (!activeVault) return <Navigate to="/" replace />;
 
@@ -48,7 +75,19 @@ export function NoteNew() {
 
     setSaveError(null);
     mutation.mutate(payload, {
-      onSuccess: (created: Note) => {
+      onSuccess: async (created: Note) => {
+        for (const s of staged) {
+          try {
+            await linkAttachment.mutateAsync({
+              noteId: created.id,
+              path: s.path,
+              mimeType: s.mimeType,
+            });
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : "Link failed";
+            pushToast(`Failed to attach ${s.filename}: ${msg}`, "error");
+          }
+        }
         pushToast(`Created ${created.path ?? created.id}`, "success");
         navigate(`/notes/${encodeURIComponent(created.id)}`);
       },
@@ -66,7 +105,7 @@ export function NoteNew() {
         }
       },
     });
-  }, [draft, isValid, mutation, navigate, pushToast]);
+  }, [draft, isValid, linkAttachment, mutation, navigate, pushToast, staged]);
 
   const handleCancel = useCallback(() => {
     if (isDirty && !confirm("Discard this draft?")) return;
@@ -175,14 +214,23 @@ export function NoteNew() {
         ) : null}
 
         <div className="grid min-h-[60vh] gap-4 lg:grid-cols-2">
-          <div className="min-w-0 rounded-md border border-border bg-card">
+          <AttachmentDropZone
+            onDropFiles={uploader.start}
+            className="min-w-0 rounded-md border border-border bg-card"
+            hint="Images, audio, webm video"
+          >
             <CodeMirrorEditor
+              ref={editorRef}
               value={draft.content}
               onChange={(content) => setDraft((d) => ({ ...d, content }))}
               onSave={handleCreate}
               onCancel={handleCancel}
+              onPasteFile={(files) => {
+                uploader.start(files);
+                return true;
+              }}
             />
-          </div>
+          </AttachmentDropZone>
           <div className="min-w-0 overflow-auto rounded-md border border-border bg-card p-4">
             {draft.content.trim() ? (
               <MarkdownView content={draft.content} resolve={resolver} />
@@ -191,6 +239,44 @@ export function NoteNew() {
             )}
           </div>
         </div>
+
+        <section className="mt-6 border-t border-border pt-4">
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="font-serif text-lg">Attachments</h2>
+            <AttachmentPicker onPickFiles={uploader.start} />
+          </div>
+          <p className="mb-3 text-xs text-fg-dim">
+            Drop or paste files into the editor. Attachments link to the note when you save. Max 100
+            MB each. Images, audio, webm video.{" "}
+            <a
+              href="https://github.com/ParachuteComputer/parachute-vault/issues/127"
+              target="_blank"
+              rel="noreferrer"
+              className="underline"
+            >
+              PDF + mp4 coming
+            </a>
+            .
+          </p>
+          <AttachmentUploadList
+            uploads={uploader.uploads}
+            onCancel={uploader.cancel}
+            onDismiss={uploader.dismiss}
+          />
+          {staged.length > 0 ? (
+            <ul className="mt-3 space-y-1 text-sm">
+              {staged.map((s) => (
+                <li
+                  key={s.path}
+                  className="flex items-center justify-between gap-2 rounded border border-border bg-card/50 px-3 py-1.5 font-mono text-xs text-fg-muted"
+                >
+                  <span className="truncate">{s.filename}</span>
+                  <span className="shrink-0 text-fg-dim">staged</span>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </section>
       </article>
     </div>
   );

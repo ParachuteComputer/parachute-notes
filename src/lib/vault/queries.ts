@@ -1,9 +1,16 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo } from "react";
-import { type CreateNotePayload, type UpdateNotePayload, VaultClient } from "./client";
+import {
+  type CreateNotePayload,
+  type StorageUploadResult,
+  type UpdateNotePayload,
+  type UploadProgress,
+  VaultClient,
+} from "./client";
 import { type NoteQueryState, buildNoteQueryParams } from "./note-query";
 import { loadToken } from "./storage";
 import { useVaultStore } from "./store";
+import type { NoteAttachment } from "./types";
 
 export function useActiveVaultClient(): VaultClient | null {
   const vault = useVaultStore((s) => s.getActiveVault());
@@ -102,6 +109,42 @@ export function useCreateNote() {
       qc.invalidateQueries({ queryKey: ["notes", activeId] });
       qc.invalidateQueries({ queryKey: ["tags", activeId] });
       qc.invalidateQueries({ queryKey: ["vaultInfo", activeId] });
+    },
+  });
+}
+
+export function useUploadStorageFile() {
+  const client = useActiveVaultClient();
+  return useMutation({
+    mutationFn: async (args: {
+      file: File;
+      onProgress?: (p: UploadProgress) => void;
+      signal?: AbortSignal;
+    }): Promise<StorageUploadResult> => {
+      if (!client) throw new Error("No active vault");
+      return client.uploadStorageFile(args.file, {
+        onProgress: args.onProgress,
+        signal: args.signal,
+      });
+    },
+  });
+}
+
+export function useLinkAttachment() {
+  const client = useActiveVaultClient();
+  const activeId = useVaultStore((s) => s.activeVaultId);
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (args: {
+      noteId: string;
+      path: string;
+      mimeType: string;
+    }): Promise<NoteAttachment> => {
+      if (!client) throw new Error("No active vault");
+      return client.linkAttachment(args.noteId, { path: args.path, mimeType: args.mimeType });
+    },
+    onSuccess: (_att, args) => {
+      qc.invalidateQueries({ queryKey: ["note", activeId, args.noteId] });
     },
   });
 }

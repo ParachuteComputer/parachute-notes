@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { VaultAuthError, VaultClient, VaultConflictError } from "./client";
+import { VaultAuthError, VaultClient, VaultConflictError, VaultUploadError } from "./client";
 
 function mockFetch(response: { ok?: boolean; status?: number; json?: unknown; text?: string }) {
   return vi.fn<typeof fetch>(async () => {
@@ -10,6 +10,49 @@ function mockFetch(response: { ok?: boolean; status?: number; json?: unknown; te
       text: async () => response.text ?? "",
     } as Response;
   });
+}
+
+class FakeXhrUpload {
+  onprogress: ((e: ProgressEvent) => void) | null = null;
+}
+
+class FakeXhr {
+  method = "";
+  url = "";
+  headers: Record<string, string> = {};
+  body: Document | XMLHttpRequestBodyInit | null = null;
+  status = 0;
+  responseText = "";
+  upload = new FakeXhrUpload();
+  onload: (() => void) | null = null;
+  onerror: (() => void) | null = null;
+  onabort: (() => void) | null = null;
+
+  open(method: string, url: string) {
+    this.method = method;
+    this.url = url;
+  }
+  setRequestHeader(k: string, v: string) {
+    this.headers[k] = v;
+  }
+  send(body: Document | XMLHttpRequestBodyInit | null) {
+    this.body = body;
+  }
+  abort() {
+    // Real XHRs fire onabort when abort() is called.
+    this.fireAbort();
+  }
+  fireProgress(loaded: number, total: number) {
+    this.upload.onprogress?.({ lengthComputable: true, loaded, total } as ProgressEvent);
+  }
+  resolve(status: number, body: string) {
+    this.status = status;
+    this.responseText = body;
+    this.onload?.();
+  }
+  fireAbort() {
+    this.onabort?.();
+  }
 }
 
 describe("VaultClient", () => {
@@ -289,6 +332,153 @@ describe("VaultClient", () => {
       fetchImpl,
     });
     await expect(client.deleteNote("abc")).rejects.toBeInstanceOf(VaultAuthError);
+  });
+
+  it("uploadStorageFile POSTs multipart to /api/storage/upload with Bearer + progress", async () => {
+    const xhrs: FakeXhr[] = [];
+    const factory = () => {
+      const x = new FakeXhr();
+      xhrs.push(x);
+      return x as unknown as XMLHttpRequest;
+    };
+    const client = new VaultClient({
+      vaultUrl: "http://localhost:1940",
+      accessToken: "pvt_abc",
+      fetchImpl: vi.fn(),
+      xhrFactory: factory,
+    });
+
+    const file = new File([new Uint8Array([1, 2, 3, 4])], "shot.png", { type: "image/png" });
+    const progressSeen: number[] = [];
+    const promise = client.uploadStorageFile(file, {
+      onProgress: (p) => progressSeen.push(p.loaded),
+    });
+
+    const xhr = xhrs[0]!;
+    expect(xhr.method).toBe("POST");
+    expect(xhr.url).toBe("http://localhost:1940/api/storage/upload");
+    expect(xhr.headers.Authorization).toBe("Bearer pvt_abc");
+    expect(xhr.body).toBeInstanceOf(FormData);
+    expect((xhr.body as FormData).get("file")).toBeInstanceOf(File);
+
+    xhr.fireProgress(2, 4);
+    xhr.fireProgress(4, 4);
+    xhr.resolve(
+      201,
+      JSON.stringify({ path: "2026-04-18/abc.png", size: 4, mimeType: "image/png" }),
+    );
+
+    const result = await promise;
+    expect(result).toEqual({ path: "2026-04-18/abc.png", size: 4, mimeType: "image/png" });
+    expect(progressSeen).toEqual([2, 4]);
+  });
+
+  it("uploadStorageFile throws VaultAuthError on 401", async () => {
+    const xhrs: FakeXhr[] = [];
+    const factory = () => {
+      const x = new FakeXhr();
+      xhrs.push(x);
+      return x as unknown as XMLHttpRequest;
+    };
+    const client = new VaultClient({
+      vaultUrl: "http://localhost:1940",
+      accessToken: "pvt_abc",
+      fetchImpl: vi.fn(),
+      xhrFactory: factory,
+    });
+    const file = new File([new Uint8Array([1])], "x.png", { type: "image/png" });
+    const p = client.uploadStorageFile(file);
+    xhrs[0]!.resolve(401, '{"error":"unauthorized"}');
+    await expect(p).rejects.toBeInstanceOf(VaultAuthError);
+  });
+
+  it("uploadStorageFile surfaces 413 with VaultUploadError carrying status", async () => {
+    const xhrs: FakeXhr[] = [];
+    const factory = () => {
+      const x = new FakeXhr();
+      xhrs.push(x);
+      return x as unknown as XMLHttpRequest;
+    };
+    const client = new VaultClient({
+      vaultUrl: "http://localhost:1940",
+      accessToken: "pvt_abc",
+      fetchImpl: vi.fn(),
+      xhrFactory: factory,
+    });
+    const file = new File([new Uint8Array([1])], "x.png", { type: "image/png" });
+    const p = client.uploadStorageFile(file);
+    xhrs[0]!.resolve(413, '{"error":"File too large (200MB). Max: 100MB"}');
+    const err = await p.catch((e) => e);
+    expect(err).toBeInstanceOf(VaultUploadError);
+    expect((err as VaultUploadError).status).toBe(413);
+    expect((err as Error).message).toMatch(/too large/i);
+  });
+
+  it("uploadStorageFile aborts when signal is aborted", async () => {
+    const xhrs: FakeXhr[] = [];
+    const factory = () => {
+      const x = new FakeXhr();
+      xhrs.push(x);
+      return x as unknown as XMLHttpRequest;
+    };
+    const client = new VaultClient({
+      vaultUrl: "http://localhost:1940",
+      accessToken: "pvt_abc",
+      fetchImpl: vi.fn(),
+      xhrFactory: factory,
+    });
+    const file = new File([new Uint8Array([1])], "x.png", { type: "image/png" });
+    const controller = new AbortController();
+    const p = client.uploadStorageFile(file, { signal: controller.signal });
+    controller.abort();
+    xhrs[0]!.fireAbort();
+    const err = await p.catch((e) => e);
+    expect(err).toBeInstanceOf(DOMException);
+    expect((err as DOMException).name).toBe("AbortError");
+  });
+
+  it("linkAttachment POSTs JSON to /api/notes/:id/attachments and returns the attachment", async () => {
+    const fetchImpl = mockFetch({
+      status: 201,
+      json: {
+        id: "att-1",
+        noteId: "note-a",
+        path: "2026-04-18/abc.png",
+        mimeType: "image/png",
+        createdAt: "2026-04-18T12:00:00Z",
+      },
+    });
+    const client = new VaultClient({
+      vaultUrl: "http://localhost:1940",
+      accessToken: "pvt_abc",
+      fetchImpl,
+    });
+    const att = await client.linkAttachment("note-a", {
+      path: "2026-04-18/abc.png",
+      mimeType: "image/png",
+    });
+    expect(att.id).toBe("att-1");
+    const call = fetchImpl.mock.calls[0];
+    expect(call?.[0]).toBe("http://localhost:1940/api/notes/note-a/attachments");
+    const init = call?.[1] as RequestInit;
+    expect(init.method).toBe("POST");
+    expect(new Headers(init.headers).get("Content-Type")).toBe("application/json");
+    expect(JSON.parse(init.body as string)).toEqual({
+      path: "2026-04-18/abc.png",
+      mimeType: "image/png",
+    });
+  });
+
+  it("linkAttachment propagates 401 as VaultAuthError", async () => {
+    const fetchImpl = mockFetch({ ok: false, status: 401 });
+    const client = new VaultClient({
+      vaultUrl: "http://localhost:1940",
+      accessToken: "pvt_abc",
+      fetchImpl,
+    });
+    await expect(
+      client.linkAttachment("note-a", { path: "x", mimeType: "image/png" }),
+    ).rejects.toBeInstanceOf(VaultAuthError);
   });
 
   it("listTags hits /api/tags and returns the summary array", async () => {

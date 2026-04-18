@@ -86,10 +86,14 @@ export interface NoteLink {
 
 export interface NoteAttachment {
   id: string;
+  noteId?: string;
   filename?: string;
   mimeType?: string;
+  path?: string;
   url?: string;
   size?: number;
+  createdAt?: string;
+  metadata?: Record<string, unknown>;
   [key: string]: unknown;
 }
 

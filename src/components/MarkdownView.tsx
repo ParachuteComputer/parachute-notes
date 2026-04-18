@@ -4,6 +4,7 @@ import ReactMarkdown, { type Components } from "react-markdown";
 import { Link } from "react-router";
 import rehypeHighlight from "rehype-highlight";
 import remarkGfm from "remark-gfm";
+import { VaultImage } from "./VaultImage";
 
 export function buildWikilinkResolver(note: Note): WikilinkResolver {
   const map = new Map<string, string>();
@@ -19,6 +20,10 @@ export function buildWikilinkResolver(note: Note): WikilinkResolver {
 }
 
 const MARKDOWN_COMPONENTS: Components = {
+  img({ node: _node, src, alt, className }) {
+    if (!src) return null;
+    return <VaultImage src={src} alt={alt ?? ""} className={className} />;
+  },
   a({ node: _node, href, className, children, ...rest }) {
     const classes = className ?? "";
     if (classes.includes("wikilink")) {

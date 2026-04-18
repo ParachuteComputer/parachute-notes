@@ -4,7 +4,7 @@ import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
 import { EditorState } from "@codemirror/state";
 import { EditorView, keymap, lineNumbers } from "@codemirror/view";
 import { tags as t } from "@lezer/highlight";
-import { useEffect, useRef } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
 
 const lensHighlight = HighlightStyle.define([
   { tag: t.heading, color: "var(--color-fg)", fontWeight: "600" },
@@ -47,22 +47,53 @@ const lensTheme = EditorView.theme({
   },
 });
 
+export interface CodeMirrorEditorHandle {
+  insertAtCursor(text: string): void;
+  focus(): void;
+}
+
 interface Props {
   value: string;
   onChange(next: string): void;
   onSave?(): void;
   onCancel?(): void;
+  onPasteFile?(files: File[]): boolean;
 }
 
-export function CodeMirrorEditor({ value, onChange, onSave, onCancel }: Props) {
+export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, Props>(function CodeMirrorEditor(
+  { value, onChange, onSave, onCancel, onPasteFile },
+  ref,
+) {
   const host = useRef<HTMLDivElement>(null);
   const view = useRef<EditorView | null>(null);
   const onChangeRef = useRef(onChange);
   const onSaveRef = useRef(onSave);
   const onCancelRef = useRef(onCancel);
+  const onPasteFileRef = useRef(onPasteFile);
   onChangeRef.current = onChange;
   onSaveRef.current = onSave;
   onCancelRef.current = onCancel;
+  onPasteFileRef.current = onPasteFile;
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      insertAtCursor(text: string) {
+        const v = view.current;
+        if (!v) return;
+        const pos = v.state.selection.main.head;
+        v.dispatch({
+          changes: { from: pos, insert: text },
+          selection: { anchor: pos + text.length },
+        });
+        v.focus();
+      },
+      focus() {
+        view.current?.focus();
+      },
+    }),
+    [],
+  );
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: editor builds once; handlers are re-read via refs
   useEffect(() => {
@@ -76,6 +107,26 @@ export function CodeMirrorEditor({ value, onChange, onSave, onCancel }: Props) {
         syntaxHighlighting(lensHighlight),
         lensTheme,
         EditorView.lineWrapping,
+        EditorView.domEventHandlers({
+          paste(event) {
+            const items = event.clipboardData?.items;
+            if (!items) return false;
+            const files: File[] = [];
+            for (const item of items) {
+              if (item.kind === "file") {
+                const f = item.getAsFile();
+                if (f) files.push(f);
+              }
+            }
+            if (files.length === 0) return false;
+            const handled = onPasteFileRef.current?.(files);
+            if (handled) {
+              event.preventDefault();
+              return true;
+            }
+            return false;
+          },
+        }),
         keymap.of([
           ...defaultKeymap,
           ...historyKeymap,
@@ -118,4 +169,4 @@ export function CodeMirrorEditor({ value, onChange, onSave, onCancel }: Props) {
   }, [value]);
 
   return <div ref={host} className="h-full overflow-auto" />;
-}
+});

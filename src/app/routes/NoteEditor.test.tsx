@@ -1,4 +1,5 @@
 import { NoteEditor } from "@/app/routes/NoteEditor";
+import { useToastStore } from "@/lib/toast/store";
 import { useVaultStore } from "@/lib/vault/store";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
@@ -8,14 +9,102 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // Swap CodeMirror out for a plain textarea so tests can drive onChange without
 // wrangling CM6 inside jsdom.
-vi.mock("@/components/CodeMirrorEditor", () => ({
-  CodeMirrorEditor: ({
-    value,
-    onChange,
-  }: { value: string; onChange(next: string): void; onSave?(): void; onCancel?(): void }) => (
-    <textarea data-testid="cm-editor" value={value} onChange={(e) => onChange(e.target.value)} />
-  ),
-}));
+vi.mock("@/components/CodeMirrorEditor", async () => {
+  const React = await import("react");
+  return {
+    CodeMirrorEditor: React.forwardRef(function MockCodeMirrorEditor(
+      props: {
+        value: string;
+        onChange(next: string): void;
+        onSave?(): void;
+        onCancel?(): void;
+        onPasteFile?(files: File[]): boolean;
+      },
+      ref: React.Ref<{ insertAtCursor(s: string): void; focus(): void }>,
+    ) {
+      const { value, onChange, onPasteFile } = props;
+      React.useImperativeHandle(
+        ref,
+        () => ({
+          insertAtCursor(s: string) {
+            onChange(value + s);
+          },
+          focus() {},
+        }),
+        [value, onChange],
+      );
+      return (
+        <>
+          <textarea
+            data-testid="cm-editor"
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+          />
+          <button
+            type="button"
+            data-testid="cm-paste-image"
+            onClick={() => {
+              const f = new File([new Uint8Array([1, 2])], "pasted.png", { type: "image/png" });
+              onPasteFile?.([f]);
+            }}
+          >
+            mock paste
+          </button>
+        </>
+      );
+    }),
+  };
+});
+
+class FakeXhrUpload {
+  onprogress: ((e: ProgressEvent) => void) | null = null;
+}
+
+class FakeXhr {
+  method = "";
+  url = "";
+  body: Document | XMLHttpRequestBodyInit | null = null;
+  status = 0;
+  responseText = "";
+  headers: Record<string, string> = {};
+  upload = new FakeXhrUpload();
+  onload: (() => void) | null = null;
+  onerror: (() => void) | null = null;
+  onabort: (() => void) | null = null;
+
+  open(method: string, url: string) {
+    this.method = method;
+    this.url = url;
+  }
+  setRequestHeader(k: string, v: string) {
+    this.headers[k] = v;
+  }
+  send(body: Document | XMLHttpRequestBodyInit | null) {
+    this.body = body;
+  }
+  abort() {
+    this.onabort?.();
+  }
+  resolve(status: number, body: string) {
+    this.status = status;
+    this.responseText = body;
+    this.onload?.();
+  }
+}
+
+function installXhr(): FakeXhr[] {
+  const xhrs: FakeXhr[] = [];
+  vi.stubGlobal(
+    "XMLHttpRequest",
+    // biome-ignore lint/complexity/useArrowFunction: must be `new`-able
+    function () {
+      const x = new FakeXhr();
+      xhrs.push(x);
+      return x;
+    } as unknown as typeof XMLHttpRequest,
+  );
+  return xhrs;
+}
 
 interface FetchEntry {
   status?: number;
@@ -107,6 +196,7 @@ describe("NoteEditor route", () => {
   beforeEach(() => {
     localStorage.clear();
     useVaultStore.setState({ vaults: {}, activeVaultId: null });
+    useToastStore.setState({ toasts: [] });
     seedStore();
     // jsdom doesn't implement confirm; default it to true so paths that gate
     // on user approval proceed.
@@ -223,5 +313,88 @@ describe("NoteEditor route", () => {
     const pathInput = (await screen.findByLabelText(/note path/i)) as HTMLInputElement;
     fireEvent.change(pathInput, { target: { value: "Canon/Aaron-v2" } });
     expect(screen.getByText(/renaming moves the note/i)).toBeInTheDocument();
+  });
+
+  it("drop file → uploads, inserts markdown, and links to the existing note", async () => {
+    const fetchImpl = installFetch({
+      "GET /api/notes": { body: baseNote },
+      "POST /api/notes/abc-123/attachments": {
+        status: 201,
+        body: {
+          id: "att-1",
+          noteId: "abc-123",
+          path: "2026-04-18/shot.png",
+          mimeType: "image/png",
+        },
+      },
+    });
+    const xhrs = installXhr();
+    renderAt("/notes/abc-123/edit");
+
+    const cm = await screen.findByTestId("cm-editor");
+    const dropZone = cm.closest("div.relative");
+    expect(dropZone).not.toBeNull();
+
+    const file = new File([new Uint8Array([1, 2, 3])], "shot.png", { type: "image/png" });
+    const dataTransfer = {
+      files: [file],
+      items: [{ kind: "file" }],
+      types: ["Files"],
+      dropEffect: "copy",
+    } as unknown as DataTransfer;
+
+    fireEvent.drop(dropZone!, { dataTransfer });
+
+    await waitFor(() => expect(xhrs.length).toBe(1));
+    expect(xhrs[0]!.url).toBe("http://localhost:1940/api/storage/upload");
+
+    await act(async () => {
+      xhrs[0]!.resolve(
+        201,
+        JSON.stringify({ path: "2026-04-18/shot.png", size: 3, mimeType: "image/png" }),
+      );
+    });
+
+    await waitFor(() => {
+      expect((cm as HTMLTextAreaElement).value).toContain(
+        "![shot.png](/api/storage/2026-04-18/shot.png)",
+      );
+    });
+
+    await waitFor(() => {
+      const linkCall = fetchImpl.mock.calls.find(([url, init]) => {
+        const u = typeof url === "string" ? url : url.toString();
+        return (
+          u.includes("/api/notes/abc-123/attachments") &&
+          (init as RequestInit | undefined)?.method === "POST"
+        );
+      });
+      expect(linkCall).toBeDefined();
+    });
+  });
+
+  it("oversized file is rejected before any upload fires", async () => {
+    installFetch({ "GET /api/notes": { body: baseNote } });
+    const xhrs = installXhr();
+    renderAt("/notes/abc-123/edit");
+
+    const cm = await screen.findByTestId("cm-editor");
+    const dropZone = cm.closest("div.relative");
+
+    const big = new File([new Uint8Array([1])], "huge.png", { type: "image/png" });
+    Object.defineProperty(big, "size", { value: 200 * 1024 * 1024 });
+
+    const dataTransfer = {
+      files: [big],
+      items: [{ kind: "file" }],
+      types: ["Files"],
+    } as unknown as DataTransfer;
+    fireEvent.drop(dropZone!, { dataTransfer });
+
+    expect(xhrs.length).toBe(0);
+    await waitFor(() => {
+      const toasts = useToastStore.getState().toasts;
+      expect(toasts.some((t) => /too large/i.test(t.message))).toBe(true);
+    });
   });
 });

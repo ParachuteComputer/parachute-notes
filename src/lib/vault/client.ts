@@ -1,9 +1,44 @@
-import type { Note, TagSummary, VaultInfo } from "./types";
+import type { Note, NoteAttachment, TagSummary, VaultInfo } from "./types";
+
+export const STORAGE_MAX_BYTES = 100 * 1024 * 1024;
+export const STORAGE_ALLOWED_EXTENSIONS = new Set([
+  "wav",
+  "mp3",
+  "m4a",
+  "ogg",
+  "webm",
+  "png",
+  "jpg",
+  "jpeg",
+  "gif",
+  "webp",
+]);
 
 export interface VaultClientOptions {
   vaultUrl: string;
   accessToken: string;
   fetchImpl?: typeof fetch;
+  xhrFactory?: () => XMLHttpRequest;
+}
+
+export interface StorageUploadResult {
+  path: string;
+  size: number;
+  mimeType: string;
+}
+
+export interface UploadProgress {
+  loaded: number;
+  total: number;
+}
+
+export class VaultUploadError extends Error {
+  readonly status: number;
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = "VaultUploadError";
+    this.status = status;
+  }
 }
 
 export class VaultAuthError extends Error {
@@ -47,11 +82,17 @@ export class VaultClient {
   private readonly baseUrl: string;
   private readonly token: string;
   private readonly fetchImpl: typeof fetch;
+  private readonly xhrFactory: () => XMLHttpRequest;
 
   constructor(opts: VaultClientOptions) {
     this.baseUrl = opts.vaultUrl.replace(/\/$/, "");
     this.token = opts.accessToken;
     this.fetchImpl = opts.fetchImpl ?? fetch;
+    this.xhrFactory = opts.xhrFactory ?? (() => new XMLHttpRequest());
+  }
+
+  get vaultBaseUrl(): string {
+    return this.baseUrl;
   }
 
   private async request<T>(path: string, init: RequestInit = {}): Promise<T> {
@@ -129,6 +170,85 @@ export class VaultClient {
 
   async listTags(): Promise<TagSummary[]> {
     return this.request<TagSummary[]>("/api/tags");
+  }
+
+  uploadStorageFile(
+    file: File,
+    opts: {
+      onProgress?: (p: UploadProgress) => void;
+      signal?: AbortSignal;
+    } = {},
+  ): Promise<StorageUploadResult> {
+    return new Promise((resolve, reject) => {
+      const xhr = this.xhrFactory();
+      const form = new FormData();
+      form.append("file", file);
+
+      xhr.open("POST", `${this.baseUrl}/api/storage/upload`);
+      xhr.setRequestHeader("Authorization", `Bearer ${this.token}`);
+      xhr.setRequestHeader("Accept", "application/json");
+
+      if (opts.onProgress && xhr.upload) {
+        xhr.upload.onprogress = (e) => {
+          if (e.lengthComputable) opts.onProgress?.({ loaded: e.loaded, total: e.total });
+        };
+      }
+
+      xhr.onload = () => {
+        if (xhr.status === 401 || xhr.status === 403) {
+          reject(new VaultAuthError(`Vault rejected the token (${xhr.status})`));
+          return;
+        }
+        if (xhr.status < 200 || xhr.status >= 300) {
+          let message = `Upload failed (${xhr.status})`;
+          try {
+            const body = JSON.parse(xhr.responseText) as { error?: string };
+            if (body.error) message = body.error;
+          } catch {}
+          reject(new VaultUploadError(message, xhr.status));
+          return;
+        }
+        try {
+          resolve(JSON.parse(xhr.responseText) as StorageUploadResult);
+        } catch (e) {
+          reject(e instanceof Error ? e : new Error("Invalid upload response"));
+        }
+      };
+
+      xhr.onerror = () => reject(new VaultUploadError("Network error during upload", 0));
+      xhr.onabort = () => reject(new DOMException("Upload aborted", "AbortError"));
+
+      if (opts.signal) {
+        if (opts.signal.aborted) {
+          xhr.abort();
+          return;
+        }
+        opts.signal.addEventListener("abort", () => xhr.abort(), { once: true });
+      }
+
+      xhr.send(form);
+    });
+  }
+
+  async linkAttachment(
+    noteIdOrPath: string,
+    body: { path: string; mimeType: string },
+  ): Promise<NoteAttachment> {
+    return this.request<NoteAttachment>(
+      `/api/notes/${encodeURIComponent(noteIdOrPath)}/attachments`,
+      { method: "POST", body: JSON.stringify(body) },
+    );
+  }
+
+  async listAttachments(noteIdOrPath: string): Promise<NoteAttachment[]> {
+    return this.request<NoteAttachment[]>(
+      `/api/notes/${encodeURIComponent(noteIdOrPath)}/attachments`,
+    );
+  }
+
+  storageUrl(path: string): string {
+    const trimmed = path.startsWith("/") ? path.slice(1) : path;
+    return `${this.baseUrl}/api/storage/${trimmed}`;
   }
 
   async fetchAttachmentBlob(url: string): Promise<Blob> {

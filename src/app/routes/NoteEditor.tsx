@@ -1,11 +1,17 @@
+import { AttachmentDropZone } from "@/components/AttachmentDropZone";
+import { AttachmentPicker } from "@/components/AttachmentPicker";
+import { AttachmentUploadList } from "@/components/AttachmentUploadList";
+import type { CodeMirrorEditorHandle } from "@/components/CodeMirrorEditor";
 import { CodeMirrorEditor } from "@/components/CodeMirrorEditor";
 import { DeleteNoteButton } from "@/components/DeleteNoteButton";
 import { MarkdownView, buildWikilinkResolver } from "@/components/MarkdownView";
 import { TagEditor, normalizeTag } from "@/components/TagEditor";
+import { useAttachmentUploader } from "@/components/useAttachmentUploader";
 import { relativeTime } from "@/lib/time";
+import { useToastStore } from "@/lib/toast/store";
 import { useNote, useUpdateNote, useVaultStore } from "@/lib/vault";
 import { type UpdateNotePayload, VaultAuthError, VaultConflictError } from "@/lib/vault/client";
-import type { Note } from "@/lib/vault/types";
+import type { Note, NoteAttachment } from "@/lib/vault/types";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, Navigate, useNavigate, useParams } from "react-router";
 
@@ -56,6 +62,7 @@ function toEditorState(note: Note): EditorState {
 
 function EditorSurface({ note }: { note: Note }) {
   const navigate = useNavigate();
+  const pushToast = useToastStore((s) => s.push);
   const resolver = useMemo(() => buildWikilinkResolver(note), [note]);
   const [baseline, setBaseline] = useState<EditorState>(() => toEditorState(note));
   const [draft, setDraft] = useState<EditorState>(() => toEditorState(note));
@@ -64,6 +71,22 @@ function EditorSurface({ note }: { note: Note }) {
   const [saveError, setSaveError] = useState<string | null>(null);
   const mutation = useUpdateNote(note.id);
   const lastServerNote = useRef<Note>(note);
+  const editorRef = useRef<CodeMirrorEditorHandle>(null);
+
+  const uploader = useAttachmentUploader({
+    noteId: note.id,
+    onInsert: (md) => {
+      if (editorRef.current) {
+        editorRef.current.insertAtCursor(md);
+      } else {
+        setDraft((d) => ({ ...d, content: `${d.content}${md}` }));
+      }
+    },
+    onLinked: () => {
+      pushToast("Attachment added", "success");
+    },
+    onError: (msg) => pushToast(msg, "error"),
+  });
 
   // If the server-side note is refetched (e.g., after a background refresh),
   // only update baseline if the user has no in-flight changes.
@@ -241,19 +264,92 @@ function EditorSurface({ note }: { note: Note }) {
       ) : null}
 
       <div className="grid min-h-[60vh] gap-4 lg:grid-cols-2">
-        <div className="min-w-0 rounded-md border border-border bg-card">
+        <AttachmentDropZone
+          onDropFiles={uploader.start}
+          className="min-w-0 rounded-md border border-border bg-card"
+          hint={ALLOWLIST_HINT}
+        >
           <CodeMirrorEditor
+            ref={editorRef}
             value={draft.content}
             onChange={(content) => setDraft((d) => ({ ...d, content }))}
             onSave={handleSave}
             onCancel={handleCancel}
+            onPasteFile={(files) => {
+              uploader.start(files);
+              return true;
+            }}
           />
-        </div>
+        </AttachmentDropZone>
         <div className="min-w-0 overflow-auto rounded-md border border-border bg-card p-4">
           <MarkdownView content={previewContent} resolve={resolver} />
         </div>
       </div>
+
+      <AttachmentsSection
+        attachments={note.attachments ?? []}
+        uploads={uploader.uploads}
+        onPickFiles={uploader.start}
+        onCancel={uploader.cancel}
+        onDismiss={uploader.dismiss}
+      />
     </article>
+  );
+}
+
+const ALLOWLIST_HINT = (
+  <>
+    Images, audio, webm video.{" "}
+    <a
+      href="https://github.com/ParachuteComputer/parachute-vault/issues/127"
+      target="_blank"
+      rel="noreferrer"
+      className="underline"
+    >
+      PDF + mp4 coming
+    </a>
+  </>
+);
+
+function AttachmentsSection({
+  attachments,
+  uploads,
+  onPickFiles,
+  onCancel,
+  onDismiss,
+}: {
+  attachments: NoteAttachment[];
+  uploads: ReturnType<typeof useAttachmentUploader>["uploads"];
+  onPickFiles: (files: File[]) => void;
+  onCancel: (id: string) => void;
+  onDismiss: (id: string) => void;
+}) {
+  return (
+    <section className="mt-6 border-t border-border pt-4">
+      <div className="mb-3 flex items-center justify-between">
+        <h2 className="font-serif text-lg">Attachments</h2>
+        <AttachmentPicker onPickFiles={onPickFiles} />
+      </div>
+      <p className="mb-3 text-xs text-fg-dim">
+        Drop or paste files into the editor. Max 100 MB each. {ALLOWLIST_HINT}.
+      </p>
+      <AttachmentUploadList uploads={uploads} onCancel={onCancel} onDismiss={onDismiss} />
+      {attachments.length > 0 ? (
+        <ul className="mt-3 space-y-1 text-sm">
+          {attachments.map((a) => (
+            <li
+              key={a.id}
+              className="flex items-center justify-between gap-2 rounded border border-border bg-card/50 px-3 py-1.5 font-mono text-xs"
+            >
+              <span className="truncate" title={a.path ?? a.id}>
+                {a.filename ?? a.path ?? a.id}
+              </span>
+              {a.mimeType ? <span className="shrink-0 text-fg-dim">{a.mimeType}</span> : null}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </section>
   );
 }
 
