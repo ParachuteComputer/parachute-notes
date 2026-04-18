@@ -9,6 +9,16 @@
       content="Parachute Lens — a lightweight web UI for any Parachute Vault."
     />
     <title>Parachute Lens</title>
+    <script>
+      (function () {
+        try {
+          var t = localStorage.getItem("lens:theme");
+          if (t === "dark" || t === "light") {
+            document.documentElement.setAttribute("data-theme", t);
+          }
+        } catch (e) {}
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

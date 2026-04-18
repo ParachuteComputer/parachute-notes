@@ -22,8 +22,9 @@
   --color-card-hover: #fefdfb;
 }
 
+/* System dark — only when the user hasn't picked explicitly. */
 @media (prefers-color-scheme: dark) {
-  @theme {
+  :root:not([data-theme="light"]) {
     --color-bg: #1a1917;
     --color-bg-soft: #23221f;
     --color-fg: #e8e5de;
@@ -38,6 +39,23 @@
     --color-card: #23221f;
     --color-card-hover: #2a2926;
   }
+}
+
+/* Explicit dark — wins over system. */
+:root[data-theme="dark"] {
+  --color-bg: #1a1917;
+  --color-bg-soft: #23221f;
+  --color-fg: #e8e5de;
+  --color-fg-muted: #a8a49b;
+  --color-fg-dim: #706c64;
+  --color-accent: #7ab087;
+  --color-accent-hover: #8bc098;
+  --color-accent-light: #5b8c6a;
+  --color-sky: #7fb3cc;
+  --color-border: #33312d;
+  --color-border-light: #2a2926;
+  --color-card: #23221f;
+  --color-card-hover: #2a2926;
 }
 
 html,
@@ -157,13 +175,23 @@ body {
 }
 
 @media (prefers-color-scheme: dark) {
-  .prose-note code,
-  .prose-note pre {
+  :root:not([data-theme="light"]) .prose-note code,
+  :root:not([data-theme="light"]) .prose-note pre {
     background: #1f1e1b;
     border-color: var(--color-border);
   }
-  .prose-note .hljs {
+  :root:not([data-theme="light"]) .prose-note .hljs {
     background: #1f1e1b !important;
     color: var(--color-fg);
   }
+}
+
+:root[data-theme="dark"] .prose-note code,
+:root[data-theme="dark"] .prose-note pre {
+  background: #1f1e1b;
+  border-color: var(--color-border);
+}
+:root[data-theme="dark"] .prose-note .hljs {
+  background: #1f1e1b !important;
+  color: var(--color-fg);
 }

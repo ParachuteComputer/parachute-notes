@@ -1,3 +1,4 @@
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { type VaultRecord, useVaultStore } from "@/lib/vault";
 import { Link, useNavigate } from "react-router";
 
@@ -33,6 +34,9 @@ export function Header() {
               <Link to="/notes" className="text-sm text-fg-muted hover:text-accent">
                 Notes
               </Link>
+              <Link to="/tags" className="text-sm text-fg-muted hover:text-accent">
+                Tags
+              </Link>
               <Link to="/graph" className="text-sm text-fg-muted hover:text-accent">
                 Graph
               </Link>
@@ -58,9 +62,13 @@ export function Header() {
               >
                 Manage
               </button>
+              <ThemeToggle />
             </>
           ) : (
-            <span className="text-sm text-fg-dim">No vault connected</span>
+            <>
+              <span className="text-sm text-fg-dim">No vault connected</span>
+              <ThemeToggle />
+            </>
           )}
         </div>
       </nav>

@@ -6,7 +6,7 @@ Lens is a static single-page app that speaks directly to your vault over its HTT
 
 ## Status
 
-Pre-alpha, in active development toward launch with Parachute Vault.
+v1, in active use. Launching alongside Parachute Vault.
 
 ## Quick start
 
@@ -22,11 +22,12 @@ Open the dev URL, paste your vault URL, connect.
 - Multi-vault support — switch between vaults, tokens stored per vault
 - Note list with search, tag and path filters
 - Note view with rendered markdown, metadata, resolved `[[wikilinks]]`
-- Markdown editor with live preview
+- Markdown editor with live preview, attachments (drag, drop, paste)
 - Create and delete notes
+- Tag index at `/tags` — browse and click through to filtered note lists
 - Neighborhood graph on each note (via the vault's `near` query)
-- Full-vault graph view
-- Theme matched to Parachute's visual language
+- Full-vault graph at `/graph` with search and tag filters
+- Theme matched to Parachute's visual language — system, light, or dark; toggle in the header
 
 ## Build from source
 
