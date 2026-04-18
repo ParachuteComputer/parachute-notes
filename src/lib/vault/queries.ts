@@ -52,3 +52,15 @@ export function useTags() {
     staleTime: 60_000,
   });
 }
+
+export function useNote(id: string | undefined) {
+  const client = useActiveVaultClient();
+  const activeId = useVaultStore((s) => s.activeVaultId);
+
+  return useQuery({
+    queryKey: ["note", activeId, id],
+    enabled: !!client && !!id,
+    queryFn: () => client!.getNote(id!, { includeLinks: true, includeAttachments: true }),
+    staleTime: 10_000,
+  });
+}

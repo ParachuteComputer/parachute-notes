@@ -1,5 +1,6 @@
 @import url("https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,300;1,9..40,400&family=JetBrains+Mono:wght@400;500&display=swap");
 @import "tailwindcss";
+@import "highlight.js/styles/github.css";
 
 @theme {
   --font-sans: "DM Sans", -apple-system, BlinkMacSystemFont, sans-serif;
@@ -45,4 +46,124 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   line-height: 1.65;
+}
+
+.prose-note {
+  color: var(--color-fg);
+  font-size: 1rem;
+  line-height: 1.7;
+}
+.prose-note h1,
+.prose-note h2,
+.prose-note h3,
+.prose-note h4 {
+  font-family: var(--font-serif);
+  color: var(--color-fg);
+  letter-spacing: -0.015em;
+  margin-top: 1.75em;
+  margin-bottom: 0.5em;
+  line-height: 1.25;
+}
+.prose-note h1 {
+  font-size: 1.875rem;
+}
+.prose-note h2 {
+  font-size: 1.5rem;
+}
+.prose-note h3 {
+  font-size: 1.25rem;
+}
+.prose-note h4 {
+  font-size: 1.1rem;
+}
+.prose-note p {
+  margin: 0.75em 0;
+}
+.prose-note ul,
+.prose-note ol {
+  margin: 0.75em 0;
+  padding-left: 1.5rem;
+}
+.prose-note ul {
+  list-style: disc;
+}
+.prose-note ol {
+  list-style: decimal;
+}
+.prose-note li {
+  margin: 0.25em 0;
+}
+.prose-note li > p {
+  margin: 0.25em 0;
+}
+.prose-note blockquote {
+  border-left: 3px solid var(--color-border);
+  padding-left: 1rem;
+  margin: 1em 0;
+  color: var(--color-fg-muted);
+  font-style: italic;
+}
+.prose-note code {
+  font-family: var(--font-mono);
+  font-size: 0.875em;
+  background: var(--color-bg-soft);
+  padding: 0.1em 0.35em;
+  border-radius: 3px;
+}
+.prose-note pre {
+  background: var(--color-bg-soft);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  padding: 0.9rem 1rem;
+  margin: 1em 0;
+  overflow-x: auto;
+  font-size: 0.875em;
+  line-height: 1.5;
+}
+.prose-note pre code {
+  background: transparent;
+  padding: 0;
+  border-radius: 0;
+  font-size: inherit;
+}
+.prose-note table {
+  border-collapse: collapse;
+  margin: 1em 0;
+  width: 100%;
+  font-size: 0.9em;
+}
+.prose-note th,
+.prose-note td {
+  border: 1px solid var(--color-border);
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+}
+.prose-note th {
+  background: var(--color-bg-soft);
+  font-weight: 500;
+}
+.prose-note hr {
+  border: 0;
+  border-top: 1px solid var(--color-border);
+  margin: 1.5em 0;
+}
+.prose-note img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 6px;
+}
+.prose-note input[type="checkbox"] {
+  margin-right: 0.4em;
+}
+
+@media (prefers-color-scheme: dark) {
+  .prose-note code,
+  .prose-note pre {
+    background: #1f1e1b;
+    border-color: var(--color-border);
+  }
+  .prose-note .hljs {
+    background: #1f1e1b !important;
+    color: var(--color-fg);
+  }
 }

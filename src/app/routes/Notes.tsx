@@ -12,14 +12,16 @@ import {
 import { VaultAuthError } from "@/lib/vault/client";
 import type { Note, TagSummary } from "@/lib/vault/types";
 import { useEffect, useMemo, useState } from "react";
-import { Link, Navigate } from "react-router";
+import { Link, Navigate, useSearchParams } from "react-router";
 
 export function Notes() {
   const activeVault = useVaultStore((s) => s.getActiveVault());
+  const [searchParams] = useSearchParams();
 
   const [search, setSearch] = useState("");
   const [pathPrefix, setPathPrefix] = useState("");
-  const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const initialTags = useMemo(() => searchParams.getAll("tag"), [searchParams]);
+  const [selectedTags, setSelectedTags] = useState<string[]>(initialTags);
   const [tagMatch, setTagMatch] = useState<"any" | "all">("any");
   const [sort, setSort] = useState<"asc" | "desc">("desc");
   const [offset, setOffset] = useState(0);

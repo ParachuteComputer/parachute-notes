@@ -55,7 +55,36 @@ export class VaultClient {
     return this.request<Note[]>(`/api/notes${qs ? `?${qs}` : ""}`);
   }
 
+  async getNote(
+    id: string,
+    opts: { includeLinks?: boolean; includeAttachments?: boolean } = {},
+  ): Promise<Note | null> {
+    const params = new URLSearchParams({ id, include_content: "true" });
+    if (opts.includeLinks) params.set("include_links", "true");
+    if (opts.includeAttachments) params.set("include_attachments", "true");
+    const rows = await this.request<Note[] | Note>(`/api/notes?${params.toString()}`);
+    // The vault may return either a single note (when id is passed) or an array.
+    if (Array.isArray(rows)) return rows[0] ?? null;
+    return rows ?? null;
+  }
+
   async listTags(): Promise<TagSummary[]> {
     return this.request<TagSummary[]>("/api/tags");
+  }
+
+  async fetchAttachmentBlob(url: string): Promise<Blob> {
+    const target = url.startsWith("http")
+      ? url
+      : `${this.baseUrl}${url.startsWith("/") ? "" : "/"}${url}`;
+    const res = await this.fetchImpl(target, {
+      headers: { Authorization: `Bearer ${this.token}` },
+    });
+    if (res.status === 401 || res.status === 403) {
+      throw new VaultAuthError(`Vault rejected the token (${res.status})`);
+    }
+    if (!res.ok) {
+      throw new Error(`GET ${url} failed (${res.status})`);
+    }
+    return res.blob();
   }
 }

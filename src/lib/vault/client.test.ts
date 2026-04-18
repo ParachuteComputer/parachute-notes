@@ -88,6 +88,61 @@ describe("VaultClient", () => {
     expect(fetchImpl.mock.calls[0]?.[0]).toBe("http://localhost:1940/api/notes");
   });
 
+  it("getNote passes id, include_content, include_links, include_attachments", async () => {
+    const fetchImpl = mockFetch({
+      json: {
+        id: "abc",
+        path: "Canon/Aaron",
+        createdAt: "2026-04-16T00:00:00Z",
+        content: "# hi",
+        tags: ["canon"],
+        links: [],
+        attachments: [],
+      },
+    });
+    const client = new VaultClient({
+      vaultUrl: "http://localhost:1940",
+      accessToken: "pvt_abc",
+      fetchImpl,
+    });
+
+    const note = await client.getNote("Canon/Aaron", {
+      includeLinks: true,
+      includeAttachments: true,
+    });
+    expect(note?.id).toBe("abc");
+
+    const url = fetchImpl.mock.calls[0]?.[0] as string;
+    expect(url).toContain("id=Canon%2FAaron");
+    expect(url).toContain("include_content=true");
+    expect(url).toContain("include_links=true");
+    expect(url).toContain("include_attachments=true");
+  });
+
+  it("getNote unwraps an array response to a single note", async () => {
+    const fetchImpl = mockFetch({
+      json: [{ id: "a", createdAt: "2026-04-18T00:00:00Z" }],
+    });
+    const client = new VaultClient({
+      vaultUrl: "http://localhost:1940",
+      accessToken: "pvt_abc",
+      fetchImpl,
+    });
+    const note = await client.getNote("a");
+    expect(note?.id).toBe("a");
+  });
+
+  it("getNote returns null when the vault returns an empty array", async () => {
+    const fetchImpl = mockFetch({ json: [] });
+    const client = new VaultClient({
+      vaultUrl: "http://localhost:1940",
+      accessToken: "pvt_abc",
+      fetchImpl,
+    });
+    const note = await client.getNote("missing");
+    expect(note).toBeNull();
+  });
+
   it("listTags hits /api/tags and returns the summary array", async () => {
     const fetchImpl = mockFetch({
       json: [

@@ -62,6 +62,35 @@ export interface Note {
   preview?: string;
   byteSize?: number;
   content?: string;
+  links?: NoteLink[];
+  attachments?: NoteAttachment[];
+}
+
+export interface NoteSummary {
+  id: string;
+  path?: string;
+  tags?: string[];
+  createdAt?: string;
+  updatedAt?: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface NoteLink {
+  sourceId: string;
+  targetId: string;
+  relationship: string;
+  createdAt?: string;
+  sourceNote?: NoteSummary;
+  targetNote?: NoteSummary;
+}
+
+export interface NoteAttachment {
+  id: string;
+  filename?: string;
+  mimeType?: string;
+  url?: string;
+  size?: number;
+  [key: string]: unknown;
 }
 
 export interface TagSummary {
