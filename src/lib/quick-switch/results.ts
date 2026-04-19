@@ -52,6 +52,20 @@ export const COMMANDS: Array<{
     action: { type: "navigate", to: "/graph" },
   },
   {
+    id: "today",
+    label: "Today",
+    description: "Notes created or edited today",
+    keywords: ["today", "now", "daily"],
+    action: { type: "navigate", to: "/today" },
+  },
+  {
+    id: "calendar",
+    label: "Calendar",
+    description: "Month grid of note activity",
+    keywords: ["calendar", "month", "date"],
+    action: { type: "navigate", to: "/calendar" },
+  },
+  {
     id: "tags",
     label: "Tags",
     description: "Browse all tags",
