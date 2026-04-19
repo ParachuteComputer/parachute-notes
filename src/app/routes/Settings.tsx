@@ -230,6 +230,10 @@ const ROLE_LABELS: Record<TagRoleKey, { title: string; help: string }> = {
     title: "Text capture",
     help: "Default tag for quick typed notes.",
   },
+  view: {
+    title: "Saved view",
+    help: "Tag the /notes saved-view notes carry. Used to list them.",
+  },
 };
 
 function TagRolesSection({ vaultId }: { vaultId: string }) {

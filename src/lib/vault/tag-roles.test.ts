@@ -19,12 +19,14 @@ describe("tag roles storage", () => {
       archived: "done",
       captureVoice: "memo",
       captureText: "inbox",
+      view: "preset",
     });
     expect(loadTagRoles("v1")).toEqual({
       pinned: "favs",
       archived: "done",
       captureVoice: "memo",
       captureText: "inbox",
+      view: "preset",
     });
   });
 
@@ -41,12 +43,14 @@ describe("tag roles storage", () => {
       archived: "#done",
       captureVoice: " voice ",
       captureText: "#quick",
+      view: "#preset ",
     });
     expect(loadTagRoles("v1")).toEqual({
       pinned: "starred",
       archived: "done",
       captureVoice: "voice",
       captureText: "quick",
+      view: "preset",
     });
   });
 
@@ -56,6 +60,7 @@ describe("tag roles storage", () => {
       archived: "",
       captureVoice: "#",
       captureText: "keep",
+      view: "",
     });
     const out = loadTagRoles("v1");
     expect(out.pinned).toBe(DEFAULT_TAG_ROLES.pinned);
@@ -71,6 +76,7 @@ describe("tag roles storage", () => {
     expect(out.archived).toBe(DEFAULT_TAG_ROLES.archived);
     expect(out.captureVoice).toBe(DEFAULT_TAG_ROLES.captureVoice);
     expect(out.captureText).toBe(DEFAULT_TAG_ROLES.captureText);
+    expect(out.view).toBe(DEFAULT_TAG_ROLES.view);
   });
 
   it("returns defaults on malformed JSON", () => {

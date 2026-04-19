@@ -13,6 +13,7 @@ export interface TagRoles {
   archived: string;
   captureVoice: string;
   captureText: string;
+  view: string;
 }
 
 export const DEFAULT_TAG_ROLES: TagRoles = {
@@ -20,9 +21,10 @@ export const DEFAULT_TAG_ROLES: TagRoles = {
   archived: "archived",
   captureVoice: "voice",
   captureText: "quick",
+  view: "view",
 };
 
-export const TAG_ROLE_KEYS = ["pinned", "archived", "captureVoice", "captureText"] as const;
+export const TAG_ROLE_KEYS = ["pinned", "archived", "captureVoice", "captureText", "view"] as const;
 export type TagRoleKey = (typeof TAG_ROLE_KEYS)[number];
 
 const STORAGE_PREFIX = "lens:tag-roles:";
@@ -47,6 +49,7 @@ export function loadTagRoles(vaultId: string): TagRoles {
       archived: normalizeTag(parsed.archived, DEFAULT_TAG_ROLES.archived),
       captureVoice: normalizeTag(parsed.captureVoice, DEFAULT_TAG_ROLES.captureVoice),
       captureText: normalizeTag(parsed.captureText, DEFAULT_TAG_ROLES.captureText),
+      view: normalizeTag(parsed.view, DEFAULT_TAG_ROLES.view),
     };
   } catch {
     return { ...DEFAULT_TAG_ROLES };
@@ -59,6 +62,7 @@ export function saveTagRoles(vaultId: string, roles: TagRoles): void {
     archived: normalizeTag(roles.archived, DEFAULT_TAG_ROLES.archived),
     captureVoice: normalizeTag(roles.captureVoice, DEFAULT_TAG_ROLES.captureVoice),
     captureText: normalizeTag(roles.captureText, DEFAULT_TAG_ROLES.captureText),
+    view: normalizeTag(roles.view, DEFAULT_TAG_ROLES.view),
   };
   try {
     localStorage.setItem(keyFor(vaultId), JSON.stringify(normalized));
