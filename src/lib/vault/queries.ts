@@ -57,6 +57,26 @@ export function useNotes(queryState: NoteQueryState) {
 // pagination/sampling is a future PR.
 export const VAULT_GRAPH_NOTE_CAP = 5000;
 
+// Lightweight variant for the Cmd+K switcher: no links, no content — just
+// enough to render a title/path/tags line per entry. Capped at the same N
+// as the graph so huge vaults degrade gracefully (pagination is a later PR).
+export function useAllNotesForSwitcher(enabled: boolean) {
+  const client = useActiveVaultClient();
+  const activeId = useVaultStore((s) => s.activeVaultId);
+
+  return useQuery({
+    queryKey: ["allNotesForSwitcher", activeId],
+    enabled: !!client && enabled,
+    queryFn: () => {
+      const params = new URLSearchParams();
+      params.set("include_content", "true");
+      params.set("limit", String(VAULT_GRAPH_NOTE_CAP));
+      return client!.queryNotes(params);
+    },
+    staleTime: 60_000,
+  });
+}
+
 export function useAllNotesWithLinks() {
   const client = useActiveVaultClient();
   const activeId = useVaultStore((s) => s.activeVaultId);

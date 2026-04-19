@@ -1,4 +1,5 @@
 import { Header } from "@/components/Header";
+import { QuickSwitchMount } from "@/components/QuickSwitchMount";
 import { Toaster } from "@/components/Toaster";
 import { UpdateBanner } from "@/components/UpdateBanner";
 import { QueryProvider } from "@/providers/QueryProvider";
@@ -26,6 +27,7 @@ export function App() {
             <Toaster />
             <UpdateBanner />
             <Header />
+            <QuickSwitchMount />
             <main>
               <Routes>
                 <Route path="/" element={<Home />} />

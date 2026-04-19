@@ -2,6 +2,7 @@ import { DeleteNoteButton } from "@/components/DeleteNoteButton";
 import { MarkdownView, buildWikilinkResolver } from "@/components/MarkdownView";
 import { NeighborhoodGraph } from "@/components/NeighborhoodGraph";
 import { TranscriptionStatus } from "@/components/TranscriptionStatus";
+import { pushRecent } from "@/lib/quick-switch/recents";
 import { relativeTime } from "@/lib/time";
 import { useActiveVaultClient, useNote, useVaultStore } from "@/lib/vault";
 import { VaultAuthError } from "@/lib/vault/client";
@@ -14,6 +15,10 @@ export function NoteView() {
   const decodedId = id ? decodeURIComponent(id) : undefined;
   const activeVault = useVaultStore((s) => s.getActiveVault());
   const note = useNote(decodedId);
+
+  useEffect(() => {
+    if (activeVault && decodedId) pushRecent(activeVault.id, decodedId);
+  }, [activeVault, decodedId]);
 
   if (!activeVault) return <Navigate to="/" replace />;
 
