@@ -1,4 +1,5 @@
 import "@testing-library/jest-dom/vitest";
+import "fake-indexeddb/auto";
 
 // Bun's runtime installs a broken `localStorage` global (missing methods) that
 // shadows jsdom's implementation. Replace it with a simple in-memory Storage.

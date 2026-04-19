@@ -42,6 +42,7 @@ Open the dev URL, paste your vault URL, connect.
 - Neighborhood graph on each note (via the vault's `near` query)
 - Full-vault graph at `/graph` with search and tag filters
 - Theme matched to Parachute's visual language — system, light, or dark; toggle in the header
+- Offline-capable mutations (plumbing) — create / update / delete / attachment actions issued offline are queued in IndexedDB (with OPFS for blobs when available) and drained when the vault comes back in reach. Conflicts are stashed for human resolution; auth errors halt the drain until you reconnect. UI for the queue ships in a later PR.
 
 ## Build from source
 

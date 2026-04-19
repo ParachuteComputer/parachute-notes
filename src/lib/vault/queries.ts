@@ -1,3 +1,7 @@
+import type { LensDB } from "@/lib/sync/db";
+import { newLocalId } from "@/lib/sync/id-map";
+import { enqueue } from "@/lib/sync/queue";
+import { useSync } from "@/providers/SyncProvider";
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo } from "react";
 import {
@@ -10,7 +14,7 @@ import {
 import { type NoteQueryState, buildNoteQueryParams } from "./note-query";
 import { loadToken } from "./storage";
 import { useVaultStore } from "./store";
-import type { NoteAttachment } from "./types";
+import type { Note, NoteAttachment } from "./types";
 
 export function useActiveVaultClient(): VaultClient | null {
   const vault = useVaultStore((s) => s.getActiveVault());
@@ -94,14 +98,68 @@ export function useNote(id: string | undefined) {
   });
 }
 
+// When offline, enqueue instead of throwing. Call sites keep the same signature;
+// the returned Note is optimistic (local id + local timestamps) and is replaced
+// by the server-authored one when the drain lands.
+function isOffline(): boolean {
+  return typeof navigator !== "undefined" && navigator.onLine === false;
+}
+
+function optimisticCreatedNote(payload: CreateNotePayload, localId: string): Note {
+  const now = new Date().toISOString();
+  return {
+    id: localId,
+    path: payload.path,
+    createdAt: now,
+    updatedAt: now,
+    tags: payload.tags,
+    metadata: payload.metadata,
+    content: payload.content,
+  };
+}
+
+async function enqueueCreate(
+  db: LensDB,
+  vaultId: string,
+  payload: CreateNotePayload,
+): Promise<Note> {
+  const localId = newLocalId();
+  await enqueue(db, { kind: "create-note", localId, payload }, { vaultId });
+  return optimisticCreatedNote(payload, localId);
+}
+
+async function enqueueUpdate(
+  db: LensDB,
+  vaultId: string,
+  targetId: string,
+  payload: UpdateNotePayload,
+  existing: Note | undefined,
+): Promise<Note> {
+  await enqueue(db, { kind: "update-note", targetId, payload }, { vaultId });
+  const base: Note = existing ?? { id: targetId, createdAt: new Date().toISOString() };
+  return {
+    ...base,
+    ...(payload.content !== undefined && { content: payload.content }),
+    ...(payload.path !== undefined && { path: payload.path }),
+    ...(payload.metadata !== undefined && { metadata: payload.metadata }),
+    updatedAt: new Date().toISOString(),
+  };
+}
+
 export function useUpdateNote(id: string | undefined) {
   const client = useActiveVaultClient();
   const activeId = useVaultStore((s) => s.activeVaultId);
+  const { db } = useSync();
   const qc = useQueryClient();
 
   return useMutation({
     mutationFn: async (payload: UpdateNotePayload) => {
-      if (!client || !id) throw new Error("No active vault");
+      if (!id) throw new Error("No note id");
+      if (isOffline() && db && activeId) {
+        const existing = qc.getQueryData<Note>(["note", activeId, id]);
+        return enqueueUpdate(db, activeId, id, payload, existing);
+      }
+      if (!client) throw new Error("No active vault");
       return client.updateNote(id, payload);
     },
     onSuccess: (updated) => {
@@ -119,10 +177,14 @@ export function useUpdateNote(id: string | undefined) {
 export function useCreateNote() {
   const client = useActiveVaultClient();
   const activeId = useVaultStore((s) => s.activeVaultId);
+  const { db } = useSync();
   const qc = useQueryClient();
 
   return useMutation({
     mutationFn: async (payload: CreateNotePayload) => {
+      if (isOffline() && db && activeId) {
+        return enqueueCreate(db, activeId, payload);
+      }
       if (!client) throw new Error("No active vault");
       return client.createNote(payload);
     },
@@ -174,10 +236,19 @@ export function useLinkAttachment() {
 export function useDeleteAttachment() {
   const client = useActiveVaultClient();
   const activeId = useVaultStore((s) => s.activeVaultId);
+  const { db } = useSync();
   const qc = useQueryClient();
 
   return useMutation({
     mutationFn: async (args: { noteId: string; attachmentId: string }) => {
+      if (isOffline() && db && activeId) {
+        await enqueue(
+          db,
+          { kind: "delete-attachment", noteId: args.noteId, attachmentId: args.attachmentId },
+          { vaultId: activeId },
+        );
+        return args;
+      }
       if (!client) throw new Error("No active vault");
       await client.deleteAttachment(args.noteId, args.attachmentId);
       return args;
@@ -191,10 +262,15 @@ export function useDeleteAttachment() {
 export function useDeleteNote() {
   const client = useActiveVaultClient();
   const activeId = useVaultStore((s) => s.activeVaultId);
+  const { db } = useSync();
   const qc = useQueryClient();
 
   return useMutation({
     mutationFn: async (id: string) => {
+      if (isOffline() && db && activeId) {
+        await enqueue(db, { kind: "delete-note", targetId: id }, { vaultId: activeId });
+        return id;
+      }
       if (!client) throw new Error("No active vault");
       await client.deleteNote(id);
       return id;
