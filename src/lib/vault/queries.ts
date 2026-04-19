@@ -98,6 +98,29 @@ export function useNotesForDateViews() {
   });
 }
 
+// Fetches a capped metadata-only window of the vault for the path-tree
+// sidebar. We want a stable index of every path so the tree and threshold
+// check aren't skewed by whatever filter is currently applied to the main
+// list. Capped at VAULT_GRAPH_NOTE_CAP; vaults beyond that get a tree for
+// the most-recent N paths (the fallback input on the filter bar still works
+// for navigating outside the window).
+export function useNotesForPathTree(enabled: boolean) {
+  const client = useActiveVaultClient();
+  const activeId = useVaultStore((s) => s.activeVaultId);
+
+  return useQuery({
+    queryKey: ["notesForPathTree", activeId],
+    enabled: !!client && enabled,
+    queryFn: () => {
+      const params = new URLSearchParams();
+      params.set("sort", "desc");
+      params.set("limit", String(VAULT_GRAPH_NOTE_CAP));
+      return client!.queryNotes(params);
+    },
+    staleTime: 60_000,
+  });
+}
+
 export function useAllNotesWithLinks() {
   const client = useActiveVaultClient();
   const activeId = useVaultStore((s) => s.activeVaultId);

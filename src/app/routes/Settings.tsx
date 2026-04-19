@@ -1,3 +1,4 @@
+import { PATH_TREE_MODES, type PathTreeMode, usePathTreeMode } from "@/lib/path-tree";
 import { isStandalone } from "@/lib/pwa";
 import { type ScribeSettings, scribeHealth, useScribeSettings } from "@/lib/scribe";
 import { useToastStore } from "@/lib/toast/store";
@@ -35,6 +36,7 @@ export function Settings() {
       </header>
 
       <ScribeSettingsSection vaultId={activeVault.id} />
+      <PathTreeSection vaultId={activeVault.id} />
       <TagRolesSection vaultId={activeVault.id} />
       <InstallStateSection />
     </div>
@@ -209,6 +211,55 @@ function ScribeSettingsSection({ vaultId }: { vaultId: string }) {
         CORS error in the browser console, run scribe behind a reverse proxy that shares your
         vault's origin.
       </p>
+    </section>
+  );
+}
+
+const PATH_TREE_MODE_LABELS: Record<PathTreeMode, { title: string; help: string }> = {
+  auto: {
+    title: "Auto",
+    help: "Show the tree only when the vault has enough folders to make it worth the space.",
+  },
+  always: {
+    title: "Always",
+    help: "Always show the tree, even on a tag-flat vault.",
+  },
+  never: {
+    title: "Never",
+    help: "Hide the tree. The path-prefix text input still works.",
+  },
+};
+
+function PathTreeSection({ vaultId }: { vaultId: string }) {
+  const { mode, setMode } = usePathTreeMode(vaultId);
+  return (
+    <section className="mt-6 space-y-4 rounded-xl border border-border bg-card p-6">
+      <div>
+        <h2 className="font-serif text-xl text-fg">Folder tree (Notes sidebar)</h2>
+        <p className="mt-1 text-xs text-fg-dim">
+          Controls the collapsible folder tree on the /notes page. Auto-detect renders the tree when
+          the vault has at least five top-level folders or twenty notes in folders.
+        </p>
+      </div>
+      <fieldset className="space-y-2">
+        <legend className="sr-only">Path tree visibility</legend>
+        {PATH_TREE_MODES.map((m) => (
+          <label key={m} className="flex items-start gap-2 text-sm">
+            <input
+              type="radio"
+              name="path-tree-mode"
+              value={m}
+              checked={mode === m}
+              onChange={() => setMode(m)}
+              className="mt-1 accent-accent"
+            />
+            <span>
+              <span className="text-fg">{PATH_TREE_MODE_LABELS[m].title}</span>
+              <span className="ml-2 text-xs text-fg-dim">{PATH_TREE_MODE_LABELS[m].help}</span>
+            </span>
+          </label>
+        ))}
+      </fieldset>
     </section>
   );
 }

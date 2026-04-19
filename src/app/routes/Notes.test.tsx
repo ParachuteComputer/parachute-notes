@@ -262,4 +262,112 @@ describe("Notes route", () => {
     });
     expect(screen.getByRole("heading", { name: "Archived" })).toBeInTheDocument();
   });
+
+  it("renders the path tree once the auto threshold is met", async () => {
+    // Five distinct top-level folders trips AUTO_TOP_LEVEL_MIN.
+    installFetch({
+      notes: ["A", "B", "C", "D", "E"].map((root, i) => ({
+        id: `n${i}`,
+        path: `${root}/note-${i}.md`,
+        createdAt: "2026-04-18T10:00:00.000Z",
+        updatedAt: "2026-04-18T10:00:00.000Z",
+        tags: [],
+      })),
+      tags: [],
+    });
+
+    render(<Notes />, { wrapper: Wrapper });
+
+    expect(await screen.findByRole("complementary", { name: /path tree/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^A\b/ })).toBeInTheDocument();
+  });
+
+  it("hides the path tree when auto threshold is not met", async () => {
+    installFetch({
+      notes: [
+        {
+          id: "n1",
+          path: "Solo/note.md",
+          createdAt: "2026-04-18T10:00:00.000Z",
+          tags: [],
+        },
+      ],
+      tags: [],
+    });
+
+    render(<Notes />, { wrapper: Wrapper });
+
+    await screen.findByText("Solo/note.md");
+    expect(screen.queryByRole("complementary", { name: /path tree/i })).toBeNull();
+  });
+
+  it("mode=always renders the tree even on a tag-flat vault", async () => {
+    localStorage.setItem("lens:path-tree:dev", JSON.stringify({ mode: "always" }));
+    installFetch({
+      notes: [
+        {
+          id: "n1",
+          path: "Solo/note.md",
+          createdAt: "2026-04-18T10:00:00.000Z",
+          tags: [],
+        },
+      ],
+      tags: [],
+    });
+
+    render(<Notes />, { wrapper: Wrapper });
+    expect(await screen.findByRole("complementary", { name: /path tree/i })).toBeInTheDocument();
+  });
+
+  it("mode=never skips the path-tree fetch and hides the tree", async () => {
+    localStorage.setItem("lens:path-tree:dev", JSON.stringify({ mode: "never" }));
+    const fetchImpl = installFetch({
+      notes: ["A", "B", "C", "D", "E"].map((root, i) => ({
+        id: `n${i}`,
+        path: `${root}/note.md`,
+        createdAt: "2026-04-18T10:00:00.000Z",
+        tags: [],
+      })),
+      tags: [],
+    });
+
+    render(<Notes />, { wrapper: Wrapper });
+
+    await waitFor(() => {
+      expect(fetchImpl.mock.calls.some((c) => String(c[0]).includes("/api/notes"))).toBe(true);
+    });
+    // Two /api/notes queries fire when the tree is enabled (one filtered, one
+    // capped). When `never`, only the filtered list query goes out — so the
+    // unfiltered limit=5000 capped query should be absent.
+    const treeCall = fetchImpl.mock.calls.find((c) => {
+      const u = String(c[0]);
+      return u.includes("/api/notes") && u.includes("limit=5000");
+    });
+    expect(treeCall).toBeUndefined();
+    expect(screen.queryByRole("complementary", { name: /path tree/i })).toBeNull();
+  });
+
+  it("clicking a tree folder writes path_prefix to the URL", async () => {
+    const fetchImpl = installFetch({
+      notes: ["Canon", "B", "C", "D", "E"].map((root, i) => ({
+        id: `n${i}`,
+        path: `${root}/note-${i}.md`,
+        createdAt: "2026-04-18T10:00:00.000Z",
+        tags: [],
+      })),
+      tags: [],
+    });
+
+    render(<Notes />, { wrapper: Wrapper });
+
+    const canonNode = await screen.findByRole("button", { name: /^Canon\b/ });
+    fireEvent.click(canonNode);
+
+    await waitFor(() => {
+      expect(window.location.search).toContain("path_prefix=Canon");
+    });
+    await waitFor(() => {
+      expect(lastNotesUrl(fetchImpl)).toContain("path_prefix=Canon");
+    });
+  });
 });

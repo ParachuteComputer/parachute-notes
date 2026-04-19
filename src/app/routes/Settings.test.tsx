@@ -165,6 +165,24 @@ describe("Settings route", () => {
     expect(stored.archived).toBe("archived");
   });
 
+  it("renders the path-tree section and persists mode changes", async () => {
+    renderSettings();
+    const section = screen
+      .getByRole("heading", { name: /folder tree/i })
+      .closest("section") as HTMLElement;
+    const auto = within(section).getByLabelText(/^auto/i) as HTMLInputElement;
+    expect(auto.checked).toBe(true);
+
+    const always = within(section).getByLabelText(/^always/i);
+    await act(async () => {
+      fireEvent.click(always);
+    });
+    const stored = JSON.parse(localStorage.getItem("lens:path-tree:dev") ?? "{}") as {
+      mode?: string;
+    };
+    expect(stored.mode).toBe("always");
+  });
+
   it("reset-to-defaults wipes the stored tag roles", async () => {
     localStorage.setItem(
       "lens:tag-roles:dev",

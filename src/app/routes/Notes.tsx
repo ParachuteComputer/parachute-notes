@@ -1,4 +1,6 @@
+import { PathTree } from "@/components/PathTree";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
+import { meetsAutoThreshold, usePathTreeMode } from "@/lib/path-tree";
 import { useSaveView, useSavedViews } from "@/lib/saved-views/queries";
 import {
   type SavedView,
@@ -15,6 +17,7 @@ import {
   type NoteQueryState,
   isFilteringActive,
   useNotes,
+  useNotesForPathTree,
   useTagRoles,
   useTags,
   useVaultStore,
@@ -121,6 +124,18 @@ export function Notes({ preset }: { preset?: NotesPreset } = {}) {
   const saveView = useSaveView(roles.view);
   const pushToast = useToastStore((s) => s.push);
   const [showSaveDialog, setShowSaveDialog] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  // Path tree: independent capped fetch (separate from the filtered list) so
+  // the tree stays stable as the user narrows results. Disabled on preset
+  // routes (no sidebar) and when the user has set the mode to `never`.
+  const { mode: pathTreeMode } = usePathTreeMode(activeVault?.id ?? null);
+  const treeEnabled = !preset && pathTreeMode !== "never";
+  const treeNotes = useNotesForPathTree(treeEnabled);
+  const treePaths = useMemo(() => (treeNotes.data ?? []).map((n) => n.path), [treeNotes.data]);
+  const showPathTree =
+    treeEnabled &&
+    (pathTreeMode === "always" || (pathTreeMode === "auto" && meetsAutoThreshold(treePaths)));
 
   const currentFilters: SavedViewFilters = useMemo(
     () => ({
@@ -212,11 +227,38 @@ export function Notes({ preset }: { preset?: NotesPreset } = {}) {
 
       <div className={preset ? "" : "grid gap-6 md:grid-cols-[14rem_1fr]"}>
         {!preset ? (
-          <SavedViewsSidebar
-            views={savedViews.data}
-            isPending={savedViews.isPending}
-            error={savedViews.error}
-          />
+          <div className="space-y-3 md:space-y-6">
+            <button
+              type="button"
+              onClick={() => setSidebarOpen((o) => !o)}
+              className="flex w-full items-center justify-between rounded-md border border-border bg-card px-3 py-1.5 text-left text-sm text-fg-muted hover:text-accent md:hidden"
+              aria-expanded={sidebarOpen}
+              aria-controls="notes-sidebar"
+            >
+              <span>Folders & saved views</span>
+              <span aria-hidden="true" className="font-mono text-xs">
+                {sidebarOpen ? "▾" : "▸"}
+              </span>
+            </button>
+            <div
+              id="notes-sidebar"
+              className={`space-y-6 md:sticky md:top-6 md:self-start ${sidebarOpen ? "" : "hidden md:block"}`}
+            >
+              {showPathTree ? (
+                <PathTree
+                  paths={treePaths}
+                  vaultId={activeVault.id}
+                  currentPrefix={pathPrefix}
+                  onSelect={(p) => setPathPrefix(p)}
+                />
+              ) : null}
+              <SavedViewsSidebar
+                views={savedViews.data}
+                isPending={savedViews.isPending}
+                error={savedViews.error}
+              />
+            </div>
+          </div>
         ) : null}
 
         <div>
@@ -333,7 +375,7 @@ function SavedViewsSidebar({
   error: Error | null;
 }) {
   return (
-    <aside className="md:sticky md:top-6 md:self-start">
+    <aside>
       <h2 className="mb-2 text-xs uppercase tracking-wider text-fg-dim">Saved views</h2>
       {isPending ? (
         <p className="text-xs text-fg-dim">Loading…</p>
