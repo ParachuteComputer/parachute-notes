@@ -8,12 +8,18 @@ import {
   pickMimeType,
   requestMic,
 } from "@/lib/capture/recorder";
+import { loadScribeSettings } from "@/lib/scribe";
 import { blobRef, enqueue, newBlobId, newLocalId } from "@/lib/sync";
 import { useToastStore } from "@/lib/toast/store";
 import { useVaultStore } from "@/lib/vault";
 import { useSync } from "@/providers/SyncProvider";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, Navigate, useNavigate } from "react-router";
+
+// The stub line that `memoNoteContent` seeds. transcribe-memo looks for this
+// substring server-side before replacing; if the user has edited it out, we
+// don't clobber their work.
+const TRANSCRIPT_MARKER = "_Transcript pending._";
 
 type Phase =
   | { kind: "idle" }
@@ -171,6 +177,11 @@ export function MemoCapture() {
     const content = memoNoteContent(filename, recordedAt);
     const localId = newLocalId();
     const blobId = newBlobId();
+    // Only enqueue transcription (and retain the blob beyond upload) when the
+    // active vault has scribe configured. Otherwise memos save exactly as
+    // before, just without a transcript pass.
+    const scribe = loadScribeSettings(activeVault.id);
+    const willTranscribe = scribe !== null;
     try {
       await blobStore.put(blobId, phase.data, phase.mimeType, activeVault.id);
       await enqueue(
@@ -184,7 +195,13 @@ export function MemoCapture() {
       );
       await enqueue(
         db,
-        { kind: "upload-attachment", blobId, filename, mimeType: phase.mimeType },
+        {
+          kind: "upload-attachment",
+          blobId,
+          filename,
+          mimeType: phase.mimeType,
+          retain: willTranscribe,
+        },
         { vaultId: activeVault.id },
       );
       await enqueue(
@@ -197,6 +214,20 @@ export function MemoCapture() {
         },
         { vaultId: activeVault.id },
       );
+      if (willTranscribe) {
+        await enqueue(
+          db,
+          {
+            kind: "transcribe-memo",
+            noteId: localId,
+            blobId,
+            filename,
+            mimeType: phase.mimeType,
+            marker: TRANSCRIPT_MARKER,
+          },
+          { vaultId: activeVault.id },
+        );
+      }
       // Kick the engine so online users see it flush right away; offline it
       // no-ops and the next online event picks it up.
       void engine?.runOnce();

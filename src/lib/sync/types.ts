@@ -9,7 +9,8 @@ export type PendingKind =
   | "delete-note"
   | "upload-attachment"
   | "link-attachment"
-  | "delete-attachment";
+  | "delete-attachment"
+  | "transcribe-memo";
 
 export interface PendingCreateNote {
   kind: "create-note";
@@ -37,6 +38,10 @@ export interface PendingUploadAttachment {
   blobId: string;
   filename: string;
   mimeType: string;
+  // When true, the blob is kept in the store after a successful upload so
+  // downstream rows (currently just `transcribe-memo`) can still read it.
+  // Those rows are responsible for deleting the blob when they finish.
+  retain?: boolean;
 }
 
 export interface PendingLinkAttachment {
@@ -55,13 +60,29 @@ export interface PendingDeleteAttachment {
   attachmentId: string;
 }
 
+export interface PendingTranscribeMemo {
+  kind: "transcribe-memo";
+  // Server or local id — resolved against the id-map at drain time like other rows.
+  noteId: string;
+  // Blob kept alive by an upstream upload-attachment row with retain=true.
+  blobId: string;
+  filename: string;
+  mimeType: string;
+  // Substring that must still appear in the note's content for the transcript
+  // to overwrite it. If the user edited the note before the transcript
+  // arrived, the marker will be gone and we skip clobbering. Defaults to
+  // "_Transcript pending._" to match the MemoCapture stub.
+  marker: string;
+}
+
 export type PendingPayload =
   | PendingCreateNote
   | PendingUpdateNote
   | PendingDeleteNote
   | PendingUploadAttachment
   | PendingLinkAttachment
-  | PendingDeleteAttachment;
+  | PendingDeleteAttachment
+  | PendingTranscribeMemo;
 
 export type PendingStatus = "pending" | "needs-human";
 

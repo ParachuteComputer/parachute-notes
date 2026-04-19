@@ -1,3 +1,4 @@
+import { ScribeError, type ScribeSettings, transcribeAudio } from "@/lib/scribe";
 import {
   VaultAuthError,
   type VaultClient,
@@ -23,6 +24,12 @@ export const AUTH_HALT_META = "auth-halted";
 // Backoff schedule for transient errors. Caps at 10 minutes to keep the loop
 // cheap during extended outages.
 const BACKOFF_CEILING_MS = 10 * 60 * 1000;
+
+// How long we'll keep retrying a transcribe-memo row before giving up and
+// dropping the blob. 24h is enough to cover overnight scribe downtime but
+// avoids accumulating long-lived rows that will never complete (e.g. when a
+// user pointed at a scribe instance that has since gone away).
+export const TRANSCRIBE_GIVE_UP_MS = 24 * 60 * 60 * 1000;
 
 function backoffFor(attempt: number): number {
   const base = 2 ** attempt * 1000;
@@ -67,6 +74,11 @@ export interface DrainContext {
   client: VaultClient;
   vaultId: string;
   blobStore: BlobStore;
+  // Optional per-vault scribe settings. When absent, transcribe-memo rows
+  // are dropped (with a lastError explanation) rather than retried forever.
+  scribeSettings?: ScribeSettings | null;
+  // Injection for tests: lets us stub transcribeAudio without mocking fetch.
+  transcribeImpl?: typeof transcribeAudio;
   now?: () => number;
 }
 
@@ -122,6 +134,36 @@ export async function drain(ctx: DrainContext): Promise<DrainOutcome> {
         outcome.deferred += 1;
         break;
       }
+      if (err instanceof DropRowError) {
+        // Terminal: remove the row, move on.
+        await ctx.db.delete("pending", next.seq);
+        outcome.drained += 1;
+        continue;
+      }
+      if (err instanceof SkipNoClobberError) {
+        // Surface in needs-human so the user can re-run transcription.
+        await ctx.db.put("pending", {
+          ...next,
+          status: "needs-human",
+          lastError: err.message,
+          attemptCount: next.attemptCount + 1,
+        });
+        outcome.stashed += 1;
+        continue;
+      }
+      if (err instanceof ScribeError) {
+        // "unavailable" is transient — backoff and retry on the next tick.
+        // "auth" we also treat as retryable (users may fix their token
+        // without re-auth to the vault). "bad-request" / "parse" are terminal.
+        if (err.kind === "unavailable" || err.kind === "auth") {
+          await bumpAttempt(ctx.db, next, err, now);
+          outcome.deferred += 1;
+          break;
+        }
+        await ctx.db.delete("pending", next.seq);
+        outcome.drained += 1;
+        continue;
+      }
       if (err instanceof VaultNotFoundError) {
         // Target is gone — drop the row rather than retry forever.
         await ctx.db.delete("pending", next.seq);
@@ -172,6 +214,14 @@ async function bumpAttempt(
 
 class DeferRowError extends Error {}
 
+// A terminal error: this row cannot complete, remove it from the queue.
+// Used when upstream state (config, blob, note) has gone away.
+class DropRowError extends Error {}
+
+// A "don't overwrite user content" signal — we stash the row as needs-human so
+// the user can decide whether to re-run transcription later.
+class SkipNoClobberError extends Error {}
+
 async function runMutation(ctx: DrainContext, row: PendingRow): Promise<void> {
   const m = row.mutation;
   switch (m.kind) {
@@ -205,7 +255,9 @@ async function runMutation(ctx: DrainContext, row: PendingRow): Promise<void> {
       const file = new File([stored.data], m.filename, { type: mimeType });
       const uploaded = await ctx.client.uploadStorageFile(file);
       await recordBlobPath(ctx.db, m.blobId, uploaded.path, ctx.vaultId);
-      await ctx.blobStore.delete(m.blobId);
+      // Keep the blob when a downstream transcribe-memo row still needs it;
+      // that row owns cleanup.
+      if (!m.retain) await ctx.blobStore.delete(m.blobId);
       return;
     }
     case "link-attachment": {
@@ -231,6 +283,95 @@ async function runMutation(ctx: DrainContext, row: PendingRow): Promise<void> {
       await ctx.client.deleteAttachment(noteId, m.attachmentId);
       return;
     }
+    case "transcribe-memo": {
+      await runTranscribeMemo(ctx, row, m);
+      return;
+    }
+  }
+}
+
+async function runTranscribeMemo(
+  ctx: DrainContext,
+  row: PendingRow,
+  m: Extract<PendingPayload, { kind: "transcribe-memo" }>,
+): Promise<void> {
+  const noteId = await resolveNoteId(ctx.db, m.noteId, ctx.vaultId);
+  if (!noteId) throw new DeferRowError(`Awaiting local id ${m.noteId}`);
+
+  const now = ctx.now ?? (() => Date.now());
+
+  // Settings may have been cleared between enqueue and drain. We treat that
+  // as a permanent failure (drop the row + blob) rather than retry forever.
+  if (!ctx.scribeSettings?.url) {
+    await ctx.blobStore.delete(m.blobId);
+    throw new DropRowError("scribe not configured for this vault");
+  }
+
+  // Bail out if we've been retrying too long. Drop the blob and leave a
+  // trailing footnote so the user knows transcription didn't run.
+  if (now() - row.createdAt > TRANSCRIBE_GIVE_UP_MS) {
+    await replaceMarkerIfPresent(ctx.client, noteId, m.marker, transcriptionUnavailableText());
+    await ctx.blobStore.delete(m.blobId);
+    throw new DropRowError("transcription gave up after 24h");
+  }
+
+  const stored = await ctx.blobStore.get(m.blobId);
+  if (!stored) {
+    // Blob was swept by some other path — nothing to transcribe.
+    throw new DropRowError(`missing blob ${m.blobId}`);
+  }
+
+  // Don't clobber if the user already edited the note. We check server-side
+  // because the local stub isn't authoritative (the user might have edited
+  // on another device or tab).
+  const note = await ctx.client.getNote(noteId);
+  if (!note) {
+    await ctx.blobStore.delete(m.blobId);
+    throw new VaultNotFoundError(`note ${noteId} gone`);
+  }
+  const currentContent = note.content ?? "";
+  if (!currentContent.includes(m.marker)) {
+    // User edited ahead of us — surface as needs-human via conflict-like semantics.
+    throw new SkipNoClobberError("note no longer contains transcript marker");
+  }
+
+  const transcribe = ctx.transcribeImpl ?? transcribeAudio;
+  const result = await transcribe(ctx.scribeSettings.url, {
+    audio: stored.data,
+    filename: m.filename,
+    mimeType: m.mimeType,
+    cleanup: ctx.scribeSettings.cleanup,
+    token: ctx.scribeSettings.token,
+  });
+
+  const transcriptBlock = transcriptBody(result.text.trim());
+  const nextContent = currentContent.replace(m.marker, transcriptBlock);
+  await ctx.client.updateNote(noteId, { content: nextContent });
+  await ctx.blobStore.delete(m.blobId);
+}
+
+function transcriptBody(text: string): string {
+  if (!text) return "_Transcription produced no text._";
+  return `## Transcript\n\n${text}`;
+}
+
+function transcriptionUnavailableText(): string {
+  return "_Transcription unavailable._";
+}
+
+async function replaceMarkerIfPresent(
+  client: VaultClient,
+  noteId: string,
+  marker: string,
+  replacement: string,
+): Promise<void> {
+  try {
+    const note = await client.getNote(noteId);
+    if (!note?.content?.includes(marker)) return;
+    const next = note.content.replace(marker, replacement);
+    await client.updateNote(noteId, { content: next });
+  } catch {
+    // Best-effort — if we can't reach the vault we just skip the footnote.
   }
 }
 

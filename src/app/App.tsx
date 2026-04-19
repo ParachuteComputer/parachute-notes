@@ -12,6 +12,7 @@ import { NoteNew } from "./routes/NoteNew";
 import { NoteView } from "./routes/NoteView";
 import { Notes } from "./routes/Notes";
 import { OAuthCallback } from "./routes/OAuthCallback";
+import { Settings } from "./routes/Settings";
 import { Tags } from "./routes/Tags";
 import { VaultGraph } from "./routes/VaultGraph";
 import { Vaults } from "./routes/Vaults";
@@ -38,6 +39,7 @@ export function App() {
                 <Route path="/add" element={<AddVault />} />
                 <Route path="/oauth/callback" element={<OAuthCallback />} />
                 <Route path="/vaults" element={<Vaults />} />
+                <Route path="/settings" element={<Settings />} />
                 <Route path="*" element={<Home />} />
               </Routes>
             </main>

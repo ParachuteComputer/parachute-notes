@@ -66,6 +66,9 @@ export function Header() {
               >
                 Manage
               </button>
+              <Link to="/settings" className="text-sm text-fg-muted hover:text-accent">
+                Settings
+              </Link>
               <InstallPrompt />
               <ThemeToggle />
             </>

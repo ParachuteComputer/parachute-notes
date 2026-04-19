@@ -228,6 +228,59 @@ describe("MemoCapture route", () => {
       expect(rows[0].mutation.payload.path).toMatch(/^Memos\//);
       expect(rows[0].mutation.payload.tags).toEqual(["memo"]);
     }
+    // Without scribe configured, upload-attachment should not retain the blob.
+    if (upload.mutation.kind === "upload-attachment") {
+      expect(upload.mutation.retain).not.toBe(true);
+    }
+    db.close();
+  });
+
+  it("enqueues a transcribe-memo row when scribe is configured", async () => {
+    localStorage.setItem(
+      "lens:scribe:dev",
+      JSON.stringify({ url: "http://scribe.local:3200", cleanup: false }),
+    );
+    renderAt("/capture");
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /start recording/i }));
+    });
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /^stop$/i })).toBeInTheDocument();
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /^stop$/i }));
+    });
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /save memo/i })).toBeInTheDocument();
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /save memo/i }));
+    });
+    await waitFor(() => {
+      expect(screen.getByText("NotesListPage")).toBeInTheDocument();
+    });
+
+    const db = await openLensDB();
+    const rows = await listPending(db, "dev");
+    const kinds = rows.map((r) => r.mutation.kind);
+    expect(kinds).toEqual([
+      "create-note",
+      "upload-attachment",
+      "link-attachment",
+      "transcribe-memo",
+    ]);
+    const upload = rows.find((r) => r.mutation.kind === "upload-attachment")!;
+    if (upload.mutation.kind === "upload-attachment") {
+      expect(upload.mutation.retain).toBe(true);
+    }
+    const transcribe = rows.find((r) => r.mutation.kind === "transcribe-memo")!;
+    if (transcribe.mutation.kind === "transcribe-memo") {
+      expect(transcribe.mutation.marker).toBe("_Transcript pending._");
+      expect(transcribe.mutation.blobId).toBe(
+        upload.mutation.kind === "upload-attachment" ? upload.mutation.blobId : "",
+      );
+    }
     db.close();
   });
 
