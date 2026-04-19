@@ -192,12 +192,12 @@ export function Notes({ preset }: { preset?: NotesPreset } = {}) {
 
   return (
     <div className="mx-auto max-w-6xl px-6 py-10">
-      <header className="mb-6 flex items-baseline justify-between gap-4">
+      <header className="mb-6 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-3">
         <div>
           <p className="text-xs uppercase tracking-wider text-fg-dim">{activeVault.name}</p>
           <h1 className="font-serif text-3xl tracking-tight">{title}</h1>
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
           {!preset ? (
             <label className="flex items-center gap-1.5 text-sm text-fg-muted hover:text-accent">
               <input

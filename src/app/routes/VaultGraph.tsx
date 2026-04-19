@@ -168,6 +168,10 @@ function GraphCanvas({
 }) {
   const navigate = useNavigate();
   const containerRef = useRef<HTMLDivElement | null>(null);
+  // The ref is typed loosely because react-force-graph-2d's exposed methods
+  // (zoomToFit) live on the kapsule instance, not in its public TS type when
+  // wrapped in React.lazy.
+  const graphRef = useRef<{ zoomToFit?: (ms?: number, padding?: number) => void } | null>(null);
   const [size, setSize] = useState<{ w: number; h: number }>({ w: 800, h: 600 });
 
   useEffect(() => {
@@ -186,6 +190,10 @@ function GraphCanvas({
     return () => obs.disconnect();
   }, []);
 
+  const fitToScreen = () => {
+    graphRef.current?.zoomToFit?.(400, 40);
+  };
+
   const graphData = useMemo(
     () => ({
       nodes: graph.nodes.map((n) => ({ ...n })),
@@ -202,14 +210,22 @@ function GraphCanvas({
   const nodeOpacity = (id: string) => (!hasFilter || matched.has(id) ? 1 : 0.15);
 
   return (
-    <div ref={containerRef} data-testid="vault-graph-canvas" className="h-full w-full">
+    <div
+      ref={containerRef}
+      data-testid="vault-graph-canvas"
+      // touch-action: none stops the browser from scrolling/zooming the page
+      // while the user is panning or pinching the graph itself.
+      className="relative h-full w-full touch-none"
+    >
       <Suspense fallback={<GraphSkeleton message="Rendering graph…" />}>
         <ForceGraph2D
+          ref={graphRef as never}
           graphData={graphData}
           width={size.w}
           height={size.h}
           backgroundColor="rgba(0,0,0,0)"
           nodeLabel={(n) => nodeTooltip(n as unknown as VaultGraphNode)}
+          nodeRelSize={5}
           nodeVal={(n) => {
             const node = n as unknown as VaultGraphNode;
             return 2 + Math.min(node.degree, 12);
@@ -218,6 +234,19 @@ function GraphCanvas({
             const node = n as unknown as VaultGraphNode;
             const base = tagColor(node.topTag);
             return hasFilter && !matched.has(node.id) ? fade(base) : base;
+          }}
+          // Fatter invisible hit area so taps on small nodes are reliable on
+          // touch devices. Painted to an offscreen canvas the lib uses for
+          // pixel-perfect picking — visible appearance is unchanged.
+          nodePointerAreaPaint={(n, color, ctx) => {
+            const node = n as unknown as VaultGraphNode & { x?: number; y?: number };
+            if (node.x == null || node.y == null) return;
+            const val = 2 + Math.min(node.degree, 12);
+            const r = Math.max(Math.sqrt(val) * 5, 10);
+            ctx.fillStyle = color;
+            ctx.beginPath();
+            ctx.arc(node.x, node.y, r, 0, 2 * Math.PI);
+            ctx.fill();
           }}
           linkColor={(l) => {
             const link = l as unknown as { source: unknown; target: unknown };
@@ -232,6 +261,9 @@ function GraphCanvas({
           linkDirectionalArrowLength={2.5}
           linkDirectionalArrowRelPos={1}
           cooldownTicks={100}
+          // Auto-fit once the simulation settles so the user doesn't land on a
+          // graph that's panned off-screen.
+          onEngineStop={() => fitToScreen()}
           nodeCanvasObjectMode={() => "after"}
           nodeCanvasObject={(n, ctx, globalScale) => {
             const node = n as unknown as VaultGraphNode & { x?: number; y?: number };
@@ -251,6 +283,13 @@ function GraphCanvas({
           }}
         />
       </Suspense>
+      <button
+        type="button"
+        onClick={fitToScreen}
+        className="absolute right-3 bottom-3 rounded-md border border-border bg-card/90 px-3 py-1.5 text-xs text-fg-muted shadow-sm backdrop-blur hover:text-accent"
+      >
+        Fit to screen
+      </button>
     </div>
   );
 }

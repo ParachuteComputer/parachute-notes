@@ -66,6 +66,15 @@ body {
   line-height: 1.65;
 }
 
+/* Respect iOS safe-area insets for installed PWAs so content doesn't sit
+   under the notch or home indicator. The header is sticky and gets its own
+   top inset; main content gets bottom + horizontal insets. */
+body {
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
 .prose-note {
   color: var(--color-fg);
   font-size: 1rem;

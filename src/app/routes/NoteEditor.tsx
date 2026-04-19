@@ -62,6 +62,8 @@ function toEditorState(note: Note): EditorState {
   };
 }
 
+type EditorPane = "edit" | "preview";
+
 function EditorSurface({ note }: { note: Note }) {
   const navigate = useNavigate();
   const pushToast = useToastStore((s) => s.push);
@@ -71,6 +73,8 @@ function EditorSurface({ note }: { note: Note }) {
   const [tagInput, setTagInput] = useState("");
   const [conflict, setConflict] = useState<VaultConflictError | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
+  // Mobile-only pane toggle. Desktop renders both side-by-side and ignores it.
+  const [mobilePane, setMobilePane] = useState<EditorPane>("edit");
   const mutation = useUpdateNote(note.id);
   const lastServerNote = useRef<Note>(note);
   const editorRef = useRef<CodeMirrorEditorHandle>(null);
@@ -266,10 +270,33 @@ function EditorSurface({ note }: { note: Note }) {
         </div>
       ) : null}
 
+      <div
+        role="tablist"
+        aria-label="Editor view"
+        className="mb-3 inline-flex rounded-md border border-border bg-card p-0.5 text-sm lg:hidden"
+      >
+        {(["edit", "preview"] as const).map((p) => (
+          <button
+            key={p}
+            type="button"
+            role="tab"
+            aria-selected={mobilePane === p}
+            onClick={() => setMobilePane(p)}
+            className={`rounded px-3 py-1.5 capitalize ${
+              mobilePane === p ? "bg-accent text-white" : "text-fg-muted hover:text-accent"
+            }`}
+          >
+            {p}
+          </button>
+        ))}
+      </div>
+
       <div className="grid min-h-[60vh] gap-4 lg:grid-cols-2">
         <AttachmentDropZone
           onDropFiles={uploader.start}
-          className="min-w-0 rounded-md border border-border bg-card"
+          className={`min-w-0 rounded-md border border-border bg-card ${
+            mobilePane === "edit" ? "" : "hidden lg:block"
+          }`}
           hint={ALLOWLIST_HINT}
         >
           <CodeMirrorEditor
@@ -284,7 +311,11 @@ function EditorSurface({ note }: { note: Note }) {
             }}
           />
         </AttachmentDropZone>
-        <div className="min-w-0 overflow-auto rounded-md border border-border bg-card p-4">
+        <div
+          className={`min-w-0 overflow-auto rounded-md border border-border bg-card p-4 ${
+            mobilePane === "preview" ? "" : "hidden lg:block"
+          }`}
+        >
           <MarkdownView content={previewContent} resolve={resolver} />
         </div>
       </div>
