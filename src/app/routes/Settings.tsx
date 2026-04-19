@@ -1,8 +1,16 @@
 import { isStandalone } from "@/lib/pwa";
 import { type ScribeSettings, scribeHealth, useScribeSettings } from "@/lib/scribe";
 import { useToastStore } from "@/lib/toast/store";
-import { useVaultStore } from "@/lib/vault";
-import { useEffect, useState } from "react";
+import {
+  DEFAULT_TAG_ROLES,
+  TAG_ROLE_KEYS,
+  type TagRoleKey,
+  type TagRoles,
+  useTagRoles,
+  useTags,
+  useVaultStore,
+} from "@/lib/vault";
+import { useEffect, useId, useMemo, useState } from "react";
 import { Link, Navigate } from "react-router";
 
 // Per-vault settings UI. v0.2 only surfaces scribe because it's the first
@@ -27,6 +35,7 @@ export function Settings() {
       </header>
 
       <ScribeSettingsSection vaultId={activeVault.id} />
+      <TagRolesSection vaultId={activeVault.id} />
       <InstallStateSection />
     </div>
   );
@@ -200,6 +209,113 @@ function ScribeSettingsSection({ vaultId }: { vaultId: string }) {
         CORS error in the browser console, run scribe behind a reverse proxy that shares your
         vault's origin.
       </p>
+    </section>
+  );
+}
+
+const ROLE_LABELS: Record<TagRoleKey, { title: string; help: string }> = {
+  pinned: {
+    title: "Pinned",
+    help: "Tag for notes you want at the top of views.",
+  },
+  archived: {
+    title: "Archived",
+    help: "Tag for notes you've moved out of the way.",
+  },
+  captureVoice: {
+    title: "Voice capture",
+    help: "Default tag for new voice memos.",
+  },
+  captureText: {
+    title: "Text capture",
+    help: "Default tag for quick typed notes.",
+  },
+};
+
+function TagRolesSection({ vaultId }: { vaultId: string }) {
+  const { roles, setRoles } = useTagRoles(vaultId);
+  const tagsQuery = useTags();
+  const pushToast = useToastStore((s) => s.push);
+  const datalistId = useId();
+
+  const [draft, setDraft] = useState<TagRoles>(roles);
+  useEffect(() => setDraft(roles), [roles]);
+
+  const tagOptions = useMemo(() => {
+    const names = (tagsQuery.data ?? []).map((t) => t.name);
+    return [...new Set(names)].sort((a, b) => a.localeCompare(b));
+  }, [tagsQuery.data]);
+
+  const isDirty = TAG_ROLE_KEYS.some((k) => draft[k].trim() !== roles[k]);
+
+  const save = () => {
+    setRoles(draft);
+    pushToast("Tag roles saved.", "success");
+  };
+
+  const resetDefaults = () => {
+    setRoles(null);
+    setDraft(DEFAULT_TAG_ROLES);
+    pushToast("Tag roles reset to defaults.", "success");
+  };
+
+  return (
+    <section className="mt-6 space-y-4 rounded-xl border border-border bg-card p-6">
+      <div>
+        <h2 className="font-serif text-xl text-fg">Tag roles</h2>
+        <p className="mt-1 text-xs text-fg-dim">
+          Point each role at whatever tag your vault already uses. Changes apply to future notes
+          only — existing notes keep their current tags.
+        </p>
+      </div>
+
+      <datalist id={datalistId}>
+        {tagOptions.map((t) => (
+          <option key={t} value={t} />
+        ))}
+      </datalist>
+
+      <div className="space-y-3">
+        {TAG_ROLE_KEYS.map((key) => (
+          <label key={key} className="block text-sm">
+            <span className="mb-1 flex items-baseline justify-between gap-2">
+              <span className="text-fg-muted">{ROLE_LABELS[key].title}</span>
+              <span className="text-xs text-fg-dim">default: #{DEFAULT_TAG_ROLES[key]}</span>
+            </span>
+            <input
+              type="text"
+              value={draft[key]}
+              onChange={(e) => setDraft((d) => ({ ...d, [key]: e.target.value }))}
+              list={datalistId}
+              placeholder={DEFAULT_TAG_ROLES[key]}
+              aria-label={`${ROLE_LABELS[key].title} tag role`}
+              spellCheck={false}
+              autoCapitalize="none"
+              autoCorrect="off"
+              className="w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-fg placeholder:text-fg-dim focus:border-accent focus:outline-none"
+            />
+            <span className="mt-1 block text-xs text-fg-dim">{ROLE_LABELS[key].help}</span>
+          </label>
+        ))}
+      </div>
+
+      <div className="flex flex-wrap items-center gap-3 pt-2">
+        <button
+          type="button"
+          onClick={save}
+          disabled={!isDirty}
+          className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-40"
+        >
+          Save
+        </button>
+        <button
+          type="button"
+          onClick={resetDefaults}
+          className="text-sm text-fg-muted hover:text-accent"
+        >
+          Reset to defaults
+        </button>
+      </div>
     </section>
   );
 }

@@ -9,5 +9,6 @@ export * from "./probe";
 export * from "./queries";
 export * from "./storage";
 export * from "./store";
+export * from "./tag-roles";
 export * from "./types";
 export * from "./url";

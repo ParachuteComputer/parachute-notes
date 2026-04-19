@@ -226,7 +226,7 @@ describe("MemoCapture route", () => {
     expect(link.mutation.mimeType).toBe("audio/webm;codecs=opus");
     if (rows[0].mutation.kind === "create-note") {
       expect(rows[0].mutation.payload.path).toMatch(/^Memos\//);
-      expect(rows[0].mutation.payload.tags).toEqual(["memo"]);
+      expect(rows[0].mutation.payload.tags).toEqual(["voice"]);
     }
     // Without scribe configured, upload-attachment should not retain the blob.
     if (upload.mutation.kind === "upload-attachment") {

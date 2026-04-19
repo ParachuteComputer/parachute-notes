@@ -11,7 +11,7 @@ import {
 import { loadScribeSettings } from "@/lib/scribe";
 import { blobRef, enqueue, newBlobId, newLocalId } from "@/lib/sync";
 import { useToastStore } from "@/lib/toast/store";
-import { useVaultStore } from "@/lib/vault";
+import { useTagRoles, useVaultStore } from "@/lib/vault";
 import { useSync } from "@/providers/SyncProvider";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, Navigate, useNavigate } from "react-router";
@@ -45,6 +45,7 @@ export function MemoCapture({ embedded = false }: { embedded?: boolean } = {}) {
   const navigate = useNavigate();
   const pushToast = useToastStore((s) => s.push);
   const { db, blobStore, engine } = useSync();
+  const { roles } = useTagRoles(activeVault?.id ?? null);
 
   const [phase, setPhase] = useState<Phase>({ kind: "idle" });
   const [elapsedMs, setElapsedMs] = useState(0);
@@ -191,7 +192,7 @@ export function MemoCapture({ embedded = false }: { embedded?: boolean } = {}) {
         {
           kind: "create-note",
           localId,
-          payload: { content, path, tags: ["memo"] },
+          payload: { content, path, tags: [roles.captureVoice] },
         },
         { vaultId: activeVault.id },
       );
@@ -249,7 +250,7 @@ export function MemoCapture({ embedded = false }: { embedded?: boolean } = {}) {
       });
       pushToast(e instanceof Error ? `Save failed: ${e.message}` : "Save failed.", "error");
     }
-  }, [phase, db, blobStore, activeVault, engine, navigate, pushToast]);
+  }, [phase, db, blobStore, activeVault, engine, navigate, pushToast, roles.captureVoice]);
 
   if (!activeVault) return <Navigate to="/" replace />;
 

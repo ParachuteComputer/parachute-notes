@@ -1,9 +1,9 @@
 import { TagEditor, normalizeTag } from "@/components/TagEditor";
 import { enqueue, newLocalId } from "@/lib/sync";
 import { useToastStore } from "@/lib/toast/store";
-import { useVaultStore } from "@/lib/vault";
+import { useTagRoles, useVaultStore } from "@/lib/vault";
 import { useSync } from "@/providers/SyncProvider";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 // Apple-Notes-fast typed capture. Pure text + inline tag editor, no path or
 // metadata — the vault auto-names the note from its first line.
@@ -20,15 +20,16 @@ import { useCallback, useEffect, useRef, useState } from "react";
 // The visible button is still there because a discoverable save affordance
 // matters more than absolute chrome-minimalism, and Cmd+Enter is invisible on
 // touch devices.
-const DEFAULT_TAGS = ["quick"];
 
 export function TextCapture() {
   const activeVault = useVaultStore((s) => s.getActiveVault());
   const pushToast = useToastStore((s) => s.push);
   const { db, engine } = useSync();
+  const { roles } = useTagRoles(activeVault?.id ?? null);
 
+  const defaultTags = useMemo(() => [roles.captureText], [roles.captureText]);
   const [content, setContent] = useState("");
-  const [tags, setTags] = useState<string[]>(DEFAULT_TAGS);
+  const [tags, setTags] = useState<string[]>(() => [roles.captureText]);
   const [tagInput, setTagInput] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
@@ -62,7 +63,7 @@ export function TextCapture() {
       );
       void engine?.runOnce();
       setContent("");
-      setTags(DEFAULT_TAGS);
+      setTags(defaultTags);
       setTagInput("");
       pushToast("Captured.", "success");
       // Keep focus so the user can dash off the next thought.
@@ -72,7 +73,7 @@ export function TextCapture() {
       pushToast(e instanceof Error ? `Capture failed: ${e.message}` : "Capture failed.", "error");
       return false;
     }
-  }, [content, tags, db, activeVault, engine, pushToast]);
+  }, [content, tags, db, activeVault, engine, pushToast, defaultTags]);
 
   const onKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
