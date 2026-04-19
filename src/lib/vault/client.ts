@@ -182,6 +182,12 @@ export class VaultClient {
     return this.request<TagSummary[]>("/api/tags");
   }
 
+  async deleteTag(name: string): Promise<void> {
+    await this.request<undefined>(`/api/tags/${encodeURIComponent(name)}`, {
+      method: "DELETE",
+    });
+  }
+
   uploadStorageFile(
     file: File,
     opts: {

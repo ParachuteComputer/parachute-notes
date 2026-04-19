@@ -91,8 +91,8 @@ describe("Tags route", () => {
       </Wrap>,
     );
     const list = await screen.findByRole("list", { name: /tag list/i });
-    const items = within(list).getAllByRole("listitem");
-    expect(items.map((el) => el.textContent ?? "")).toEqual(["canon9", "idea5", "daily2"]);
+    const links = within(list).getAllByRole("link");
+    expect(links.map((el) => el.textContent ?? "")).toEqual(["#canon9", "#idea5", "#daily2"]);
   });
 
   it("filters tags by the search input", async () => {
@@ -158,6 +158,82 @@ describe("Tags route", () => {
       </Wrap>,
     );
     expect(await screen.findByText(/no tags in this vault yet/i)).toBeInTheDocument();
+  });
+
+  it("rename button opens a dialog and runs the rename flow", async () => {
+    const calls: Array<{ url: string; method: string; body?: unknown }> = [];
+    const impl = vi.fn<typeof fetch>(async (input, init) => {
+      const url = typeof input === "string" ? input : (input as URL).toString();
+      const method = init?.method ?? "GET";
+      const body = init?.body ? JSON.parse(init.body as string) : undefined;
+      calls.push({ url, method, body });
+      if (url.endsWith("/api/tags") && method === "GET") {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => [{ name: "work", count: 2 }],
+        } as Response;
+      }
+      if (url.includes("/api/notes?") && url.includes("tag=work")) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => [
+            { id: "n1", createdAt: "2026-04-18T00:00:00Z", tags: ["work"] },
+            { id: "n2", createdAt: "2026-04-18T00:00:00Z", tags: ["work"] },
+          ],
+        } as Response;
+      }
+      if (method === "PATCH") {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ id: "x", tags: ["projects"] }),
+        } as Response;
+      }
+      if (method === "DELETE") {
+        return { ok: true, status: 204, json: async () => undefined } as Response;
+      }
+      return { ok: true, status: 200, json: async () => [] } as Response;
+    });
+    vi.stubGlobal("fetch", impl);
+
+    render(
+      <Wrap>
+        <Tags />
+      </Wrap>,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: /rename tag work/i }));
+    const input = await screen.findByLabelText(/new tag name/i);
+    fireEvent.change(input, { target: { value: "projects" } });
+    fireEvent.click(screen.getByRole("button", { name: "Rename" }));
+
+    await waitFor(() => {
+      expect(calls.some((c) => c.method === "PATCH")).toBe(true);
+    });
+    const patches = calls.filter((c) => c.method === "PATCH");
+    expect(patches).toHaveLength(2);
+    expect(patches[0]?.body).toEqual({ tags: { add: ["projects"], remove: ["work"] } });
+  });
+
+  it("merge requires 2+ selected tags before the merge button enables", async () => {
+    installFetch({
+      tags: [
+        { name: "alpha", count: 1 },
+        { name: "beta", count: 1 },
+      ],
+    });
+    render(
+      <Wrap>
+        <Tags />
+      </Wrap>,
+    );
+    await screen.findByRole("link", { name: /alpha/i });
+    fireEvent.click(screen.getByRole("checkbox", { name: /select tag alpha/i }));
+    expect(screen.getByRole("button", { name: /merge into/i })).toBeDisabled();
+    fireEvent.click(screen.getByRole("checkbox", { name: /select tag beta/i }));
+    expect(screen.getByRole("button", { name: /merge into/i })).toBeEnabled();
   });
 
   it("shows the filtered-empty state when filter matches nothing", async () => {
