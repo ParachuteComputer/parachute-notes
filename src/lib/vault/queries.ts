@@ -14,6 +14,7 @@ import {
 import { type NoteQueryState, buildNoteQueryParams } from "./note-query";
 import { loadToken } from "./storage";
 import { useVaultStore } from "./store";
+import { type TagMutationResult, mergeTags, renameTag } from "./tag-mutations";
 import type { Note, NoteAttachment } from "./types";
 
 export function useActiveVaultClient(): VaultClient | null {
@@ -255,6 +256,45 @@ export function useDeleteAttachment() {
     },
     onSuccess: (args) => {
       qc.invalidateQueries({ queryKey: ["note", activeId, args.noteId] });
+    },
+  });
+}
+
+export function useRenameTag() {
+  const client = useActiveVaultClient();
+  const activeId = useVaultStore((s) => s.activeVaultId);
+  const qc = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (args: { oldName: string; newName: string }): Promise<TagMutationResult> => {
+      if (!client) throw new Error("No active vault");
+      return renameTag(client, args.oldName, args.newName);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["tags", activeId] });
+      qc.invalidateQueries({ queryKey: ["notes", activeId] });
+      qc.invalidateQueries({ queryKey: ["vaultInfo", activeId] });
+    },
+  });
+}
+
+export function useMergeTags() {
+  const client = useActiveVaultClient();
+  const activeId = useVaultStore((s) => s.activeVaultId);
+  const qc = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (args: {
+      sources: string[];
+      target: string;
+    }): Promise<TagMutationResult[]> => {
+      if (!client) throw new Error("No active vault");
+      return mergeTags(client, args.sources, args.target);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["tags", activeId] });
+      qc.invalidateQueries({ queryKey: ["notes", activeId] });
+      qc.invalidateQueries({ queryKey: ["vaultInfo", activeId] });
     },
   });
 }
