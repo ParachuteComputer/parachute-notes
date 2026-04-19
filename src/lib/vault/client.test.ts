@@ -4,6 +4,7 @@ import {
   VaultClient,
   VaultConflictError,
   VaultNotFoundError,
+  VaultTargetExistsError,
   VaultUploadError,
 } from "./client";
 
@@ -520,6 +521,121 @@ describe("VaultClient", () => {
       fetchImpl,
     });
     await expect(client.deleteAttachment("note-a", "att-1")).rejects.toBeInstanceOf(VaultAuthError);
+  });
+
+  it("renameTag POSTs new_name to /api/tags/:name/rename and returns the count", async () => {
+    const fetchImpl = mockFetch({ json: { renamed: 3 } });
+    const client = new VaultClient({
+      vaultUrl: "http://localhost:1940",
+      accessToken: "pvt_abc",
+      fetchImpl,
+    });
+    await expect(client.renameTag("work", "projects")).resolves.toEqual({ renamed: 3 });
+    const call = fetchImpl.mock.calls[0];
+    expect(call?.[0]).toBe("http://localhost:1940/api/tags/work/rename");
+    const init = call?.[1] as RequestInit;
+    expect(init.method).toBe("POST");
+    expect(new Headers(init.headers).get("Content-Type")).toBe("application/json");
+    expect(JSON.parse(init.body as string)).toEqual({ new_name: "projects" });
+  });
+
+  it("renameTag encodes the source name so slashes and symbols survive", async () => {
+    const fetchImpl = mockFetch({ json: { renamed: 0 } });
+    const client = new VaultClient({
+      vaultUrl: "http://localhost:1940",
+      accessToken: "pvt_abc",
+      fetchImpl,
+    });
+    await client.renameTag("a/b c", "d");
+    expect(fetchImpl.mock.calls[0]?.[0]).toBe("http://localhost:1940/api/tags/a%2Fb%20c/rename");
+  });
+
+  it("renameTag throws VaultTargetExistsError on 409 target_exists so callers can offer merge", async () => {
+    const fetchImpl = mockFetch({
+      ok: false,
+      status: 409,
+      json: { error: "target_exists", target: "projects", message: "already exists" },
+    });
+    const client = new VaultClient({
+      vaultUrl: "http://localhost:1940",
+      accessToken: "pvt_abc",
+      fetchImpl,
+    });
+    const err = await client.renameTag("work", "projects").catch((e) => e);
+    expect(err).toBeInstanceOf(VaultTargetExistsError);
+    expect((err as VaultTargetExistsError).target).toBe("projects");
+  });
+
+  it("renameTag propagates 404 as VaultNotFoundError", async () => {
+    const fetchImpl = mockFetch({ ok: false, status: 404, json: { error: "not_found" } });
+    const client = new VaultClient({
+      vaultUrl: "http://localhost:1940",
+      accessToken: "pvt_abc",
+      fetchImpl,
+    });
+    await expect(client.renameTag("gone", "still-gone")).rejects.toBeInstanceOf(VaultNotFoundError);
+  });
+
+  it("renameTag propagates 401 as VaultAuthError", async () => {
+    const fetchImpl = mockFetch({ ok: false, status: 401 });
+    const client = new VaultClient({
+      vaultUrl: "http://localhost:1940",
+      accessToken: "pvt_abc",
+      fetchImpl,
+    });
+    await expect(client.renameTag("a", "b")).rejects.toBeInstanceOf(VaultAuthError);
+  });
+
+  it("updateNote still throws VaultConflictError on a note-style 409 (not target_exists)", async () => {
+    // Guard: the 409-body sniff for target_exists must not steal note-concurrency conflicts.
+    const fetchImpl = mockFetch({
+      ok: false,
+      status: 409,
+      json: {
+        current_updated_at: "2026-04-18T12:05:00Z",
+        expected_updated_at: "2026-04-18T11:00:00Z",
+      },
+    });
+    const client = new VaultClient({
+      vaultUrl: "http://localhost:1940",
+      accessToken: "pvt_abc",
+      fetchImpl,
+    });
+    await expect(
+      client.updateNote("a", { content: "x", if_updated_at: "2026-04-18T11:00:00Z" }),
+    ).rejects.toBeInstanceOf(VaultConflictError);
+  });
+
+  it("mergeTags POSTs sources + target to /api/tags/merge", async () => {
+    const fetchImpl = mockFetch({
+      json: { merged: { alpha: 3, beta: 2 }, target: "projects" },
+    });
+    const client = new VaultClient({
+      vaultUrl: "http://localhost:1940",
+      accessToken: "pvt_abc",
+      fetchImpl,
+    });
+    const res = await client.mergeTags(["alpha", "beta"], "projects");
+    expect(res.target).toBe("projects");
+    expect(res.merged).toEqual({ alpha: 3, beta: 2 });
+    const call = fetchImpl.mock.calls[0];
+    expect(call?.[0]).toBe("http://localhost:1940/api/tags/merge");
+    const init = call?.[1] as RequestInit;
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(init.body as string)).toEqual({
+      sources: ["alpha", "beta"],
+      target: "projects",
+    });
+  });
+
+  it("mergeTags propagates 401 as VaultAuthError", async () => {
+    const fetchImpl = mockFetch({ ok: false, status: 401 });
+    const client = new VaultClient({
+      vaultUrl: "http://localhost:1940",
+      accessToken: "pvt_abc",
+      fetchImpl,
+    });
+    await expect(client.mergeTags(["a"], "b")).rejects.toBeInstanceOf(VaultAuthError);
   });
 
   it("listTags hits /api/tags and returns the summary array", async () => {

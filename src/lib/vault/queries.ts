@@ -14,7 +14,6 @@ import {
 import { type NoteQueryState, buildNoteQueryParams } from "./note-query";
 import { loadToken } from "./storage";
 import { useVaultStore } from "./store";
-import { type TagMutationResult, mergeTags, renameTag } from "./tag-mutations";
 import type { Note, NoteAttachment } from "./types";
 
 export function useActiveVaultClient(): VaultClient | null {
@@ -307,9 +306,12 @@ export function useRenameTag() {
   const qc = useQueryClient();
 
   return useMutation({
-    mutationFn: async (args: { oldName: string; newName: string }): Promise<TagMutationResult> => {
+    mutationFn: async (args: {
+      oldName: string;
+      newName: string;
+    }): Promise<{ renamed: number }> => {
       if (!client) throw new Error("No active vault");
-      return renameTag(client, args.oldName, args.newName);
+      return client.renameTag(args.oldName, args.newName);
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["tags", activeId] });
@@ -328,9 +330,9 @@ export function useMergeTags() {
     mutationFn: async (args: {
       sources: string[];
       target: string;
-    }): Promise<TagMutationResult[]> => {
+    }): Promise<{ merged: Record<string, number>; target: string }> => {
       if (!client) throw new Error("No active vault");
-      return mergeTags(client, args.sources, args.target);
+      return client.mergeTags(args.sources, args.target);
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["tags", activeId] });

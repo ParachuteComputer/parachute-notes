@@ -160,7 +160,7 @@ describe("Tags route", () => {
     expect(await screen.findByText(/no tags in this vault yet/i)).toBeInTheDocument();
   });
 
-  it("rename button opens a dialog and runs the rename flow", async () => {
+  it("rename button opens a dialog and POSTs to the atomic rename endpoint", async () => {
     const calls: Array<{ url: string; method: string; body?: unknown }> = [];
     const impl = vi.fn<typeof fetch>(async (input, init) => {
       const url = typeof input === "string" ? input : (input as URL).toString();
@@ -174,25 +174,12 @@ describe("Tags route", () => {
           json: async () => [{ name: "work", count: 2 }],
         } as Response;
       }
-      if (url.includes("/api/notes?") && url.includes("tag=work")) {
+      if (url.endsWith("/api/tags/work/rename") && method === "POST") {
         return {
           ok: true,
           status: 200,
-          json: async () => [
-            { id: "n1", createdAt: "2026-04-18T00:00:00Z", tags: ["work"] },
-            { id: "n2", createdAt: "2026-04-18T00:00:00Z", tags: ["work"] },
-          ],
+          json: async () => ({ renamed: 2 }),
         } as Response;
-      }
-      if (method === "PATCH") {
-        return {
-          ok: true,
-          status: 200,
-          json: async () => ({ id: "x", tags: ["projects"] }),
-        } as Response;
-      }
-      if (method === "DELETE") {
-        return { ok: true, status: 204, json: async () => undefined } as Response;
       }
       return { ok: true, status: 200, json: async () => [] } as Response;
     });
@@ -210,11 +197,12 @@ describe("Tags route", () => {
     fireEvent.click(screen.getByRole("button", { name: "Rename" }));
 
     await waitFor(() => {
-      expect(calls.some((c) => c.method === "PATCH")).toBe(true);
+      expect(calls.some((c) => c.url.endsWith("/api/tags/work/rename"))).toBe(true);
     });
-    const patches = calls.filter((c) => c.method === "PATCH");
-    expect(patches).toHaveLength(2);
-    expect(patches[0]?.body).toEqual({ tags: { add: ["projects"], remove: ["work"] } });
+    const posts = calls.filter((c) => c.url.endsWith("/api/tags/work/rename"));
+    expect(posts).toHaveLength(1);
+    expect(posts[0]?.method).toBe("POST");
+    expect(posts[0]?.body).toEqual({ new_name: "projects" });
   });
 
   it("merge requires 2+ selected tags before the merge button enables", async () => {

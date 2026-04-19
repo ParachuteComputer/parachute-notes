@@ -1,19 +1,32 @@
 import { useToastStore } from "@/lib/toast/store";
-import { VaultAuthError } from "@/lib/vault/client";
-import type { TagMutationResult } from "@/lib/vault/tag-mutations";
+import { VaultAuthError, VaultTargetExistsError } from "@/lib/vault/client";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 
 // Shared confirm-dialog for rename (one source → target) and merge
-// (many sources → target). Both operations share a partial-failure UX:
-// after a successful but imperfect run, we hold the dialog open to show
-// per-note errors rather than toast-and-close.
+// (many sources → target). Both operations are atomic at the vault: success
+// toasts and closes; a thrown error renders inline. Rename has one special
+// branch: if the target already exists (409 target_exists), we surface a
+// "merge instead" affordance that re-runs via `onRunMerge`.
+
+export interface RenameResult {
+  renamed: number;
+}
+export interface MergeResult {
+  merged: Record<string, number>;
+  target: string;
+}
+
+const sumMerged = (m: Record<string, number>) => Object.values(m).reduce((s, n) => s + n, 0);
 
 interface Props {
   mode: "rename" | "merge";
   sources: string[];
   tagOptions: string[];
   onClose(): void;
-  onRun(target: string): Promise<TagMutationResult | TagMutationResult[]>;
+  onRun(target: string): Promise<RenameResult | MergeResult>;
+  // Rename-mode only: rerun the operation as a merge when the target already
+  // exists. Called with the colliding target name.
+  onRunMerge?(target: string): Promise<MergeResult>;
   pending: boolean;
   offline: boolean;
 }
@@ -24,6 +37,7 @@ export function TagRenameDialog({
   tagOptions,
   onClose,
   onRun,
+  onRunMerge,
   pending,
   offline,
 }: Props) {
@@ -31,7 +45,8 @@ export function TagRenameDialog({
   const datalistId = useId();
   const [target, setTarget] = useState(mode === "rename" ? (sources[0] ?? "") : "");
   const [err, setErr] = useState<string | null>(null);
-  const [results, setResults] = useState<TagMutationResult[] | null>(null);
+  const [collidingTarget, setCollidingTarget] = useState<string | null>(null);
+  const [mergingCollision, setMergingCollision] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -51,36 +66,57 @@ export function TagRenameDialog({
   const canConfirm =
     !pending &&
     !offline &&
+    !mergingCollision &&
     cleanTarget.length > 0 &&
     !(mode === "rename" && cleanTarget === sources[0]);
 
   const handleConfirm = useCallback(async () => {
     if (!canConfirm) return;
     setErr(null);
+    setCollidingTarget(null);
     try {
       const res = await onRun(cleanTarget);
-      const arr = Array.isArray(res) ? res : [res];
-      const anyFailed = arr.some((r) => r.failed.length > 0);
-      if (anyFailed) {
-        setResults(arr);
-        return;
+      if ("renamed" in res) {
+        pushToast(`Renamed on ${res.renamed} note${res.renamed === 1 ? "" : "s"}.`, "success");
+      } else {
+        const total = sumMerged(res.merged);
+        pushToast(
+          `Merged into #${res.target} on ${total} note${total === 1 ? "" : "s"}.`,
+          "success",
+        );
       }
-      const total = arr.reduce((s, r) => s + r.succeeded, 0);
-      pushToast(
-        mode === "rename"
-          ? `Renamed on ${total} note${total === 1 ? "" : "s"}.`
-          : `Merged into #${cleanTarget} on ${total} note${total === 1 ? "" : "s"}.`,
-        "success",
-      );
       onClose();
     } catch (e) {
+      if (e instanceof VaultTargetExistsError && mode === "rename" && onRunMerge) {
+        setCollidingTarget(e.target);
+        return;
+      }
       if (e instanceof VaultAuthError) {
         setErr("Session expired. Reconnect to retry.");
       } else {
         setErr(e instanceof Error ? e.message : "Operation failed.");
       }
     }
-  }, [canConfirm, cleanTarget, mode, onClose, onRun, pushToast]);
+  }, [canConfirm, cleanTarget, mode, onClose, onRun, onRunMerge, pushToast]);
+
+  const handleMergeInstead = useCallback(async () => {
+    if (!collidingTarget || !onRunMerge) return;
+    setErr(null);
+    setMergingCollision(true);
+    try {
+      const res = await onRunMerge(collidingTarget);
+      const total = sumMerged(res.merged);
+      pushToast(`Merged into #${res.target} on ${total} note${total === 1 ? "" : "s"}.`, "success");
+      onClose();
+    } catch (e) {
+      if (e instanceof VaultAuthError) {
+        setErr("Session expired. Reconnect to retry.");
+      } else {
+        setErr(e instanceof Error ? e.message : "Merge failed.");
+      }
+      setMergingCollision(false);
+    }
+  }, [collidingTarget, onClose, onRunMerge, pushToast]);
 
   const title = mode === "rename" ? "Rename tag" : `Merge ${sources.length} tags`;
 
@@ -97,131 +133,112 @@ export function TagRenameDialog({
         <h2 id="tag-op-title" className="mb-2 font-serif text-xl text-fg">
           {title}
         </h2>
-        {results ? (
-          <PartialFailureBody results={results} mode={mode} onClose={onClose} />
-        ) : (
-          <>
-            <p className="mb-3 text-sm text-fg-muted">
-              {mode === "rename" ? (
-                <>
-                  Rename <Chip>{sources[0]}</Chip> on every note that carries it. Notes that already
-                  have the new tag will end up with one copy.
-                </>
-              ) : (
-                <>
-                  Combine{" "}
-                  {sources.map((s, i) => (
-                    <span key={s}>
-                      <Chip>{s}</Chip>
-                      {i < sources.length - 1 ? ", " : ""}
-                    </span>
-                  ))}{" "}
-                  into one tag. The originals are removed.
-                </>
-              )}{" "}
-              Changes apply now — there's no undo, but the operation is idempotent if you retry.
+        <p className="mb-3 text-sm text-fg-muted">
+          {mode === "rename" ? (
+            <>
+              Rename <Chip>{sources[0]}</Chip> on every note that carries it. Notes that already
+              have the new tag will end up with one copy.
+            </>
+          ) : (
+            <>
+              Combine{" "}
+              {sources.map((s, i) => (
+                <span key={s}>
+                  <Chip>{s}</Chip>
+                  {i < sources.length - 1 ? ", " : ""}
+                </span>
+              ))}{" "}
+              into one tag. The originals are removed.
+            </>
+          )}{" "}
+          Changes apply atomically on the vault.
+        </p>
+        <label className="mb-3 block text-sm">
+          <span className="mb-1 block text-fg-muted">
+            {mode === "rename" ? "New tag name" : "Target tag"}
+          </span>
+          <input
+            ref={inputRef}
+            type="text"
+            value={target}
+            onChange={(e) => {
+              setTarget(e.target.value);
+              if (collidingTarget) setCollidingTarget(null);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && canConfirm) void handleConfirm();
+            }}
+            list={datalistId}
+            aria-label={mode === "rename" ? "New tag name" : "Merge target tag"}
+            spellCheck={false}
+            autoCapitalize="none"
+            autoCorrect="off"
+            className="w-full rounded-md border border-border bg-bg/40 px-2.5 py-1.5 font-mono text-sm text-fg focus:border-accent focus:outline-none"
+            autoComplete="off"
+          />
+          <datalist id={datalistId}>
+            {tagOptions.map((t) => (
+              <option key={t} value={t} />
+            ))}
+          </datalist>
+        </label>
+        {offline ? (
+          <p className="mb-3 text-sm text-amber-300">
+            Offline — tag operations need a live vault connection.
+          </p>
+        ) : null}
+        {collidingTarget ? (
+          <div
+            role="alert"
+            className="mb-3 rounded-md border border-amber-500/40 bg-amber-500/5 p-3 text-sm"
+          >
+            <p className="mb-2 text-amber-300">
+              A tag named <Chip>{collidingTarget}</Chip> already exists.
             </p>
-            <label className="mb-3 block text-sm">
-              <span className="mb-1 block text-fg-muted">
-                {mode === "rename" ? "New tag name" : "Target tag"}
-              </span>
-              <input
-                ref={inputRef}
-                type="text"
-                value={target}
-                onChange={(e) => setTarget(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && canConfirm) void handleConfirm();
-                }}
-                list={datalistId}
-                aria-label={mode === "rename" ? "New tag name" : "Merge target tag"}
-                spellCheck={false}
-                autoCapitalize="none"
-                autoCorrect="off"
-                className="w-full rounded-md border border-border bg-bg/40 px-2.5 py-1.5 font-mono text-sm text-fg focus:border-accent focus:outline-none"
-                autoComplete="off"
-              />
-              <datalist id={datalistId}>
-                {tagOptions.map((t) => (
-                  <option key={t} value={t} />
-                ))}
-              </datalist>
-            </label>
-            {offline ? (
-              <p className="mb-3 text-sm text-amber-300">
-                Offline — tag operations need a live vault connection.
-              </p>
-            ) : null}
-            {err ? (
-              <p role="alert" className="mb-3 text-sm text-red-400">
-                {err}
-              </p>
-            ) : null}
-            <div className="flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={onClose}
-                className="rounded-md border border-border bg-card px-3 py-1.5 text-sm text-fg-muted hover:text-fg"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={() => void handleConfirm()}
-                disabled={!canConfirm}
-                className="rounded-md bg-accent px-4 py-1.5 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-40"
-              >
-                {pending
-                  ? mode === "rename"
-                    ? "Renaming…"
-                    : "Merging…"
-                  : mode === "rename"
-                    ? "Rename"
-                    : "Merge"}
-              </button>
-            </div>
-          </>
-        )}
+            <p className="mb-3 text-fg-muted">
+              Merge <Chip>{sources[0]}</Chip> into <Chip>{collidingTarget}</Chip> instead? Notes
+              that carry both end up with one copy.
+            </p>
+            <button
+              type="button"
+              onClick={() => void handleMergeInstead()}
+              disabled={mergingCollision}
+              className="rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-white hover:bg-accent-hover disabled:opacity-40"
+            >
+              {mergingCollision ? "Merging…" : `Merge into #${collidingTarget}`}
+            </button>
+          </div>
+        ) : null}
+        {err ? (
+          <p role="alert" className="mb-3 text-sm text-red-400">
+            {err}
+          </p>
+        ) : null}
+        <div className="flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-md border border-border bg-card px-3 py-1.5 text-sm text-fg-muted hover:text-fg"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={() => void handleConfirm()}
+            disabled={!canConfirm}
+            className="rounded-md bg-accent px-4 py-1.5 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-40"
+          >
+            {pending
+              ? mode === "rename"
+                ? "Renaming…"
+                : "Merging…"
+              : mode === "rename"
+                ? "Rename"
+                : "Merge"}
+          </button>
+        </div>
       </div>
     </dialog>
-  );
-}
-
-function PartialFailureBody({
-  results,
-  mode,
-  onClose,
-}: {
-  results: TagMutationResult[];
-  mode: "rename" | "merge";
-  onClose(): void;
-}) {
-  const succeeded = results.reduce((s, r) => s + r.succeeded, 0);
-  const failed = results.flatMap((r) => r.failed);
-  return (
-    <>
-      <p className="mb-3 text-sm text-fg-muted">
-        {mode === "rename" ? "Rename" : "Merge"} finished with errors. {succeeded} note
-        {succeeded === 1 ? "" : "s"} updated, {failed.length} failed. Retrying is safe — the
-        successful notes won't be touched again.
-      </p>
-      <ul className="mb-3 max-h-48 space-y-1 overflow-y-auto rounded-md border border-border bg-bg/40 p-2 text-xs">
-        {failed.map((f, i) => (
-          <li key={`${f.noteId}-${i}`} className="font-mono text-red-400">
-            <span className="text-fg-muted">{f.path ?? f.noteId}:</span> {f.error}
-          </li>
-        ))}
-      </ul>
-      <div className="flex justify-end">
-        <button
-          type="button"
-          onClick={onClose}
-          className="rounded-md bg-accent px-4 py-1.5 text-sm font-medium text-white hover:bg-accent-hover"
-        >
-          Close
-        </button>
-      </div>
-    </>
   );
 }
 

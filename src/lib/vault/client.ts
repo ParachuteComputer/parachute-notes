@@ -70,6 +70,18 @@ export class VaultConflictError extends Error {
   }
 }
 
+// Thrown by `renameTag` when the vault refuses because a tag with the target
+// name already exists. Callers (e.g. the rename dialog) surface this as an
+// affordance to merge into the existing tag instead.
+export class VaultTargetExistsError extends Error {
+  readonly target: string;
+  constructor(target: string, message?: string) {
+    super(message ?? `A tag named "${target}" already exists`);
+    this.name = "VaultTargetExistsError";
+    this.target = target;
+  }
+}
+
 export interface UpdateNotePayload {
   content?: string;
   path?: string;
@@ -120,10 +132,19 @@ export class VaultClient {
     }
     if (res.status === 409) {
       const body = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        target?: string;
         message?: string;
         current_updated_at?: string | null;
         expected_updated_at?: string | null;
       };
+      // The vault's tag-rename endpoint returns `{error:"target_exists",...}`
+      // for name-collision; the note PATCH endpoint returns the
+      // current_updated_at/expected_updated_at shape. Different failure modes,
+      // same HTTP status — distinguish by body shape.
+      if (body.error === "target_exists" && typeof body.target === "string") {
+        throw new VaultTargetExistsError(body.target, body.message);
+      }
       throw new VaultConflictError(body);
     }
     if (!res.ok) {
@@ -185,6 +206,23 @@ export class VaultClient {
   async deleteTag(name: string): Promise<void> {
     await this.request<undefined>(`/api/tags/${encodeURIComponent(name)}`, {
       method: "DELETE",
+    });
+  }
+
+  async renameTag(oldName: string, newName: string): Promise<{ renamed: number }> {
+    return this.request<{ renamed: number }>(`/api/tags/${encodeURIComponent(oldName)}/rename`, {
+      method: "POST",
+      body: JSON.stringify({ new_name: newName }),
+    });
+  }
+
+  async mergeTags(
+    sources: string[],
+    target: string,
+  ): Promise<{ merged: Record<string, number>; target: string }> {
+    return this.request<{ merged: Record<string, number>; target: string }>("/api/tags/merge", {
+      method: "POST",
+      body: JSON.stringify({ sources, target }),
     });
   }
 

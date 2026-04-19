@@ -131,13 +131,10 @@ export function Tags() {
           sources={[renameTarget]}
           tagOptions={tagNames}
           onClose={() => setRenameTarget(null)}
-          pending={renameMut.isPending}
+          pending={renameMut.isPending || mergeMut.isPending}
           offline={offline}
-          onRun={async (target) => {
-            const res = await renameMut.mutateAsync({ oldName: renameTarget, newName: target });
-            if (res.failed.length === 0) setRenameTarget(null);
-            return res;
-          }}
+          onRun={(target) => renameMut.mutateAsync({ oldName: renameTarget, newName: target })}
+          onRunMerge={(target) => mergeMut.mutateAsync({ sources: [renameTarget], target })}
         />
       ) : null}
 
@@ -154,11 +151,7 @@ export function Tags() {
               sources: Array.from(selected),
               target,
             });
-            const anyFailed = res.some((r) => r.failed.length > 0);
-            if (!anyFailed) {
-              setMergeOpen(false);
-              clearSelection();
-            }
+            clearSelection();
             return res;
           }}
         />
