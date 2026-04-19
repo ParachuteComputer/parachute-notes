@@ -5,8 +5,8 @@ import { QueryProvider } from "@/providers/QueryProvider";
 import { SyncProvider } from "@/providers/SyncProvider";
 import { BrowserRouter, Route, Routes } from "react-router";
 import { AddVault } from "./routes/AddVault";
+import { Capture } from "./routes/Capture";
 import { Home } from "./routes/Home";
-import { MemoCapture } from "./routes/MemoCapture";
 import { NoteEditor } from "./routes/NoteEditor";
 import { NoteNew } from "./routes/NoteNew";
 import { NoteView } from "./routes/NoteView";
@@ -32,7 +32,7 @@ export function App() {
                 <Route path="/notes" element={<Notes />} />
                 <Route path="/tags" element={<Tags />} />
                 <Route path="/new" element={<NoteNew />} />
-                <Route path="/capture" element={<MemoCapture />} />
+                <Route path="/capture" element={<Capture />} />
                 <Route path="/graph" element={<VaultGraph />} />
                 <Route path="/notes/:id" element={<NoteView />} />
                 <Route path="/notes/:id/edit" element={<NoteEditor />} />

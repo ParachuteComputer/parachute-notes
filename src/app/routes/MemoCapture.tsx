@@ -38,7 +38,9 @@ function formatElapsed(ms: number): string {
   return `${String(mm).padStart(2, "0")}:${String(ss).padStart(2, "0")}`;
 }
 
-export function MemoCapture() {
+// `embedded` skips the outer container + header when rendered inside the
+// Capture tabs wrapper, which already owns that chrome.
+export function MemoCapture({ embedded = false }: { embedded?: boolean } = {}) {
   const activeVault = useVaultStore((s) => s.getActiveVault());
   const navigate = useNavigate();
   const pushToast = useToastStore((s) => s.push);
@@ -251,21 +253,8 @@ export function MemoCapture() {
 
   if (!activeVault) return <Navigate to="/" replace />;
 
-  return (
-    <div className="mx-auto max-w-2xl px-6 py-8">
-      <nav className="mb-4 text-sm text-fg-dim">
-        <Link to="/notes" className="hover:text-accent">
-          ← All notes
-        </Link>
-      </nav>
-
-      <header className="mb-8">
-        <h1 className="font-serif text-2xl text-fg">Voice memo</h1>
-        <p className="mt-1 text-sm text-fg-dim">
-          Capture a thought. Saves as a note in your vault with the audio attached.
-        </p>
-      </header>
-
+  const inner = (
+    <>
       <section className="flex flex-col items-center gap-6 rounded-xl border border-border bg-card p-10">
         {phase.kind === "idle" ? (
           <>
@@ -382,10 +371,28 @@ export function MemoCapture() {
         <p className="mb-1 font-medium text-fg-muted">Tips</p>
         <ul className="list-inside list-disc space-y-0.5">
           <li>Recording stops if you leave the tab or lock your screen.</li>
-          <li>Audio is saved in your vault; no transcription yet (coming next).</li>
+          <li>Audio is saved in your vault; transcription runs if scribe is configured.</li>
           <li>If you're offline, memos queue up and sync when you're back.</li>
         </ul>
       </aside>
+    </>
+  );
+
+  if (embedded) return inner;
+  return (
+    <div className="mx-auto max-w-2xl px-6 py-8">
+      <nav className="mb-4 text-sm text-fg-dim">
+        <Link to="/notes" className="hover:text-accent">
+          ← All notes
+        </Link>
+      </nav>
+      <header className="mb-8">
+        <h1 className="font-serif text-2xl text-fg">Voice memo</h1>
+        <p className="mt-1 text-sm text-fg-dim">
+          Capture a thought. Saves as a note in your vault with the audio attached.
+        </p>
+      </header>
+      {inner}
     </div>
   );
 }
