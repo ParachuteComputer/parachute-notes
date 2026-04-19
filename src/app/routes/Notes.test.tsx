@@ -61,8 +61,12 @@ function Wrapper({ children }: { children: ReactNode }) {
 }
 
 function lastNotesUrl(fetchImpl: ReturnType<typeof installFetch>): string {
+  // The saved-views sidebar also queries /api/notes (tag=view & views path
+  // prefix). Filter those out so assertions target the primary list query.
   const calls = fetchImpl.mock.calls.map((c) => String(c[0]));
-  const noteCalls = calls.filter((u) => u.includes("/api/notes"));
+  const noteCalls = calls.filter(
+    (u) => u.includes("/api/notes") && !u.includes("path_prefix=UI%2FViews%2F"),
+  );
   return noteCalls[noteCalls.length - 1] ?? "";
 }
 
@@ -72,6 +76,9 @@ describe("Notes route", () => {
     sessionStorage.clear();
     useVaultStore.setState({ vaults: {}, activeVaultId: null });
     seedStore();
+    // BrowserRouter reads from window.history, which persists across tests.
+    // Reset so URL-driven filter state doesn't leak between cases.
+    window.history.replaceState({}, "", "/notes");
   });
 
   afterEach(() => {

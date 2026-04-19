@@ -1,5 +1,14 @@
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
+import { useSaveView, useSavedViews } from "@/lib/saved-views/queries";
+import {
+  type SavedView,
+  type SavedViewFilters,
+  filtersToSearchParams,
+  isFiltersNonEmpty,
+  searchParamsToFilters,
+} from "@/lib/saved-views/spec";
 import { relativeTime } from "@/lib/time";
+import { useToastStore } from "@/lib/toast/store";
 import {
   DEFAULT_NOTE_QUERY,
   DEFAULT_PAGE_SIZE,
@@ -12,7 +21,7 @@ import {
 } from "@/lib/vault";
 import { VaultAuthError } from "@/lib/vault/client";
 import type { Note, TagSummary } from "@/lib/vault/types";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, Navigate, useSearchParams } from "react-router";
 
 export type NotesPreset = "pinned" | "archived";
@@ -25,19 +34,57 @@ const PRESET_TITLES: Record<NotesPreset, string> = {
 export function Notes({ preset }: { preset?: NotesPreset } = {}) {
   const activeVault = useVaultStore((s) => s.getActiveVault());
   const { roles } = useTagRoles(activeVault?.id ?? null);
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
 
-  const [search, setSearch] = useState("");
-  const [pathPrefix, setPathPrefix] = useState("");
-  const initialTags = useMemo(() => searchParams.getAll("tag"), [searchParams]);
-  const [selectedTags, setSelectedTags] = useState<string[]>(initialTags);
-  const [tagMatch, setTagMatch] = useState<"any" | "all">("any");
-  const [sort, setSort] = useState<"asc" | "desc">("desc");
+  // Hydrate filter state from URL on mount and when the URL changes
+  // externally (clicking a saved view rewrites params). Sync direction is
+  // local-state → URL; we track the last-known URL signature to avoid an
+  // immediate echo loop after a user edit.
+  const initial = useMemo(() => searchParamsToFilters(searchParams), [searchParams]);
+  const [search, setSearch] = useState(initial.search ?? "");
+  const [pathPrefix, setPathPrefix] = useState(initial.pathPrefix ?? "");
+  const [selectedTags, setSelectedTags] = useState<string[]>(initial.tags ?? []);
+  const [tagMatch, setTagMatch] = useState<"any" | "all">(initial.tagMatch ?? "any");
+  const [sort, setSort] = useState<"asc" | "desc">(initial.sort ?? "desc");
+  const [showArchived, setShowArchived] = useState(initial.showArchived ?? false);
   const [offset, setOffset] = useState(0);
-  const [showArchived, setShowArchived] = useState(false);
+
+  // Re-sync from URL when navigating between saved views without remount.
+  // Keyed on the params signature so updates from local state (which write
+  // back to the URL) don't loop.
+  const urlSignature = useMemo(() => searchParams.toString(), [searchParams]);
+  useEffect(() => {
+    const f = searchParamsToFilters(new URLSearchParams(urlSignature));
+    setSearch(f.search ?? "");
+    setPathPrefix(f.pathPrefix ?? "");
+    setSelectedTags(f.tags ?? []);
+    setTagMatch(f.tagMatch ?? "any");
+    setSort(f.sort ?? "desc");
+    setShowArchived(f.showArchived ?? false);
+  }, [urlSignature]);
 
   const debouncedSearch = useDebouncedValue(search, 300);
   const debouncedPrefix = useDebouncedValue(pathPrefix, 300);
+
+  // Push the current filter state back to the URL so it's shareable and so
+  // saved-view linking is symmetric. Skip on preset routes (/pinned,
+  // /archived) — those have their own canonical URL.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: writes only when filter dimensions change
+  useEffect(() => {
+    if (preset) return;
+    const next: SavedViewFilters = {
+      search: debouncedSearch,
+      tags: selectedTags,
+      tagMatch,
+      pathPrefix: debouncedPrefix,
+      sort,
+      showArchived,
+    };
+    const desired = filtersToSearchParams(next).toString();
+    if (desired !== urlSignature) {
+      setSearchParams(filtersToSearchParams(next), { replace: true });
+    }
+  }, [preset, debouncedSearch, debouncedPrefix, selectedTags, tagMatch, sort, showArchived]);
 
   // Merge the preset role tag into the query so vault-side filter does the
   // narrowing. User can add more tags on top via TagFilter.
@@ -70,6 +117,35 @@ export function Notes({ preset }: { preset?: NotesPreset } = {}) {
 
   const notes = useNotes(queryState);
   const tags = useTags();
+  const savedViews = useSavedViews(roles.view);
+  const saveView = useSaveView(roles.view);
+  const pushToast = useToastStore((s) => s.push);
+  const [showSaveDialog, setShowSaveDialog] = useState(false);
+
+  const currentFilters: SavedViewFilters = useMemo(
+    () => ({
+      search: debouncedSearch,
+      tags: selectedTags,
+      tagMatch,
+      pathPrefix: debouncedPrefix,
+      sort,
+      showArchived,
+    }),
+    [debouncedSearch, debouncedPrefix, selectedTags, tagMatch, sort, showArchived],
+  );
+
+  const onSaveView = useCallback(
+    async (name: string) => {
+      try {
+        await saveView.mutateAsync({ name, filters: currentFilters });
+        pushToast(`Saved view "${name}".`, "success");
+        setShowSaveDialog(false);
+      } catch (err) {
+        pushToast(`Could not save view: ${(err as Error).message}`, "error");
+      }
+    },
+    [saveView, currentFilters, pushToast],
+  );
 
   // Client-side post-process: hide archived on default list unless toggled, and
   // pinned-first stable sort on default list. Preset views skip both.
@@ -97,9 +173,10 @@ export function Notes({ preset }: { preset?: NotesPreset } = {}) {
   const pageLast = offset + (displayNotes?.length ?? 0);
   const hasPrev = offset > 0;
   const hasNext = (notes.data?.length ?? 0) === DEFAULT_PAGE_SIZE;
+  const filteringActive = isFiltersNonEmpty(currentFilters);
 
   return (
-    <div className="mx-auto max-w-4xl px-6 py-10">
+    <div className="mx-auto max-w-6xl px-6 py-10">
       <header className="mb-6 flex items-baseline justify-between gap-4">
         <div>
           <p className="text-xs uppercase tracking-wider text-fg-dim">{activeVault.name}</p>
@@ -133,77 +210,218 @@ export function Notes({ preset }: { preset?: NotesPreset } = {}) {
         </div>
       </header>
 
-      <div className="mb-6 space-y-3">
-        <input
-          type="search"
-          placeholder="Search…"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="w-full rounded-md border border-border bg-card px-3 py-2 text-sm text-fg focus:border-accent focus:outline-none"
-          aria-label="Search notes"
-        />
-        <div className="flex flex-wrap items-start gap-3">
-          <input
-            type="text"
-            placeholder="Path starts with…"
-            value={pathPrefix}
-            onChange={(e) => setPathPrefix(e.target.value)}
-            className="flex-1 min-w-48 rounded-md border border-border bg-card px-3 py-2 font-mono text-sm text-fg focus:border-accent focus:outline-none"
-            aria-label="Filter by path prefix"
+      <div className={preset ? "" : "grid gap-6 md:grid-cols-[14rem_1fr]"}>
+        {!preset ? (
+          <SavedViewsSidebar
+            views={savedViews.data}
+            isPending={savedViews.isPending}
+            error={savedViews.error}
           />
-          <TagFilter
-            tags={tags.data ?? []}
-            selected={selectedTags}
-            onToggle={(name) =>
-              setSelectedTags((cur) =>
-                cur.includes(name) ? cur.filter((t) => t !== name) : [...cur, name],
-              )
-            }
-            tagMatch={tagMatch}
-            onTagMatchChange={setTagMatch}
-            onClear={() => setSelectedTags([])}
-          />
+        ) : null}
+
+        <div>
+          <div className="mb-6 space-y-3">
+            <input
+              type="search"
+              placeholder="Search…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full rounded-md border border-border bg-card px-3 py-2 text-sm text-fg focus:border-accent focus:outline-none"
+              aria-label="Search notes"
+            />
+            <div className="flex flex-wrap items-start gap-3">
+              <input
+                type="text"
+                placeholder="Path starts with…"
+                value={pathPrefix}
+                onChange={(e) => setPathPrefix(e.target.value)}
+                className="flex-1 min-w-48 rounded-md border border-border bg-card px-3 py-2 font-mono text-sm text-fg focus:border-accent focus:outline-none"
+                aria-label="Filter by path prefix"
+              />
+              <TagFilter
+                tags={tags.data ?? []}
+                selected={selectedTags}
+                onToggle={(name) =>
+                  setSelectedTags((cur) =>
+                    cur.includes(name) ? cur.filter((t) => t !== name) : [...cur, name],
+                  )
+                }
+                tagMatch={tagMatch}
+                onTagMatchChange={setTagMatch}
+                onClear={() => setSelectedTags([])}
+              />
+              {!preset && filteringActive ? (
+                <button
+                  type="button"
+                  onClick={() => setShowSaveDialog(true)}
+                  className="rounded-md border border-accent/60 bg-accent/10 px-3 py-2 text-sm text-accent hover:bg-accent/20"
+                >
+                  Save view…
+                </button>
+              ) : null}
+            </div>
+          </div>
+
+          {notes.isPending ? (
+            <SkeletonRows />
+          ) : notes.isError ? (
+            <ErrorBlock error={notes.error} />
+          ) : displayNotes && displayNotes.length > 0 ? (
+            <ol className="divide-y divide-border rounded-md border border-border bg-card">
+              {displayNotes.map((n) => (
+                <NoteRow
+                  key={n.id}
+                  note={n}
+                  pinnedTag={roles.pinned}
+                  archivedTag={roles.archived}
+                />
+              ))}
+            </ol>
+          ) : (
+            <EmptyBlock filtering={isFilteringActive(queryState) || !!preset} />
+          )}
+
+          <div className="mt-6 flex items-center justify-between text-sm text-fg-dim">
+            <span>
+              {notes.data && notes.data.length > 0
+                ? `Showing ${pageFirst}–${pageLast}`
+                : notes.isFetching
+                  ? "Loading…"
+                  : ""}
+            </span>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                disabled={!hasPrev}
+                onClick={() => setOffset((o) => Math.max(0, o - DEFAULT_PAGE_SIZE))}
+                className="rounded-md border border-border px-3 py-1.5 text-sm text-fg-muted enabled:hover:text-accent disabled:opacity-40"
+              >
+                Previous
+              </button>
+              <button
+                type="button"
+                disabled={!hasNext}
+                onClick={() => setOffset((o) => o + DEFAULT_PAGE_SIZE)}
+                className="rounded-md border border-border px-3 py-1.5 text-sm text-fg-muted enabled:hover:text-accent disabled:opacity-40"
+              >
+                Next
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 
-      {notes.isPending ? (
-        <SkeletonRows />
-      ) : notes.isError ? (
-        <ErrorBlock error={notes.error} />
-      ) : displayNotes && displayNotes.length > 0 ? (
-        <ol className="divide-y divide-border rounded-md border border-border bg-card">
-          {displayNotes.map((n) => (
-            <NoteRow key={n.id} note={n} pinnedTag={roles.pinned} archivedTag={roles.archived} />
-          ))}
-        </ol>
-      ) : (
-        <EmptyBlock filtering={isFilteringActive(queryState) || !!preset} />
-      )}
+      {showSaveDialog ? (
+        <SaveViewDialog
+          existing={savedViews.data ?? []}
+          isSaving={saveView.isPending}
+          onCancel={() => setShowSaveDialog(false)}
+          onSave={onSaveView}
+        />
+      ) : null}
+    </div>
+  );
+}
 
-      <div className="mt-6 flex items-center justify-between text-sm text-fg-dim">
-        <span>
-          {notes.data && notes.data.length > 0
-            ? `Showing ${pageFirst}–${pageLast}`
-            : notes.isFetching
-              ? "Loading…"
-              : ""}
-        </span>
-        <div className="flex gap-2">
+function SavedViewsSidebar({
+  views,
+  isPending,
+  error,
+}: {
+  views: SavedView[] | undefined;
+  isPending: boolean;
+  error: Error | null;
+}) {
+  return (
+    <aside className="md:sticky md:top-6 md:self-start">
+      <h2 className="mb-2 text-xs uppercase tracking-wider text-fg-dim">Saved views</h2>
+      {isPending ? (
+        <p className="text-xs text-fg-dim">Loading…</p>
+      ) : error ? (
+        <p className="text-xs text-red-400">Could not load views.</p>
+      ) : !views || views.length === 0 ? (
+        <p className="text-xs text-fg-dim">
+          None yet. Apply a filter and click “Save view” to add one.
+        </p>
+      ) : (
+        <ul className="space-y-1" aria-label="Saved views">
+          {views.map((v) => (
+            <li key={v.id}>
+              <Link
+                to={`/notes?${filtersToSearchParams(v.filters).toString()}`}
+                className="block truncate rounded-md border border-transparent px-2 py-1 text-sm text-fg-muted hover:border-border hover:bg-card hover:text-accent"
+              >
+                {v.name}
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
+    </aside>
+  );
+}
+
+function SaveViewDialog({
+  existing,
+  isSaving,
+  onCancel,
+  onSave,
+}: {
+  existing: SavedView[];
+  isSaving: boolean;
+  onCancel: () => void;
+  onSave: (name: string) => void;
+}) {
+  const [name, setName] = useState("");
+  const trimmed = name.trim();
+  const collides = existing.some((v) => v.name.toLowerCase() === trimmed.toLowerCase());
+  const canSave = trimmed.length > 0 && !collides && !isSaving;
+
+  return (
+    <div
+      className="fixed inset-0 z-40 flex items-center justify-center bg-black/60 p-4"
+      // biome-ignore lint/a11y/useSemanticElements: native <dialog> requires imperative showModal()/close(); we want declarative open=showSaveDialog
+      role="dialog"
+      aria-modal="true"
+      aria-label="Save view"
+    >
+      <div className="w-full max-w-sm rounded-md border border-border bg-card p-5">
+        <h3 className="mb-3 font-serif text-lg text-fg">Save view</h3>
+        <label className="block text-sm">
+          <span className="mb-1 block text-fg-muted">Name</span>
+          <input
+            type="text"
+            value={name}
+            // biome-ignore lint/a11y/noAutofocus: dialog focus
+            autoFocus
+            onChange={(e) => setName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && canSave) onSave(trimmed);
+              if (e.key === "Escape") onCancel();
+            }}
+            placeholder="e.g. Daily journal"
+            aria-label="View name"
+            className="w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-fg focus:border-accent focus:outline-none"
+          />
+        </label>
+        {collides ? (
+          <p className="mt-2 text-xs text-red-400">A view with that name already exists.</p>
+        ) : null}
+        <div className="mt-4 flex justify-end gap-2">
           <button
             type="button"
-            disabled={!hasPrev}
-            onClick={() => setOffset((o) => Math.max(0, o - DEFAULT_PAGE_SIZE))}
-            className="rounded-md border border-border px-3 py-1.5 text-sm text-fg-muted enabled:hover:text-accent disabled:opacity-40"
+            onClick={onCancel}
+            className="rounded-md border border-border px-3 py-1.5 text-sm text-fg-muted hover:text-accent"
           >
-            Previous
+            Cancel
           </button>
           <button
             type="button"
-            disabled={!hasNext}
-            onClick={() => setOffset((o) => o + DEFAULT_PAGE_SIZE)}
-            className="rounded-md border border-border px-3 py-1.5 text-sm text-fg-muted enabled:hover:text-accent disabled:opacity-40"
+            onClick={() => canSave && onSave(trimmed)}
+            disabled={!canSave}
+            className="rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-40"
           >
-            Next
+            {isSaving ? "Saving…" : "Save"}
           </button>
         </div>
       </div>
