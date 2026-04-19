@@ -24,7 +24,7 @@ export function App() {
   return (
     <QueryProvider>
       <SyncProvider>
-        <BrowserRouter>
+        <BrowserRouter basename={import.meta.env.BASE_URL.replace(/\/$/, "") || undefined}>
           <div className="min-h-dvh bg-bg text-fg">
             <Toaster />
             <UpdateBanner />

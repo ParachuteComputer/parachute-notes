@@ -6,8 +6,17 @@ import { normalizeVaultUrl } from "./url";
 
 const REDIRECT_PATH = "/oauth/callback";
 
+// Notes is mounted under `import.meta.env.BASE_URL` (defaults to `/`, can be
+// `/notes/` when the CLI's expose tooling path-routes us). The OAuth callback
+// must include that prefix so the authorization server bounces the browser
+// back to a URL the SPA actually serves.
+function basePathPrefix(): string {
+  const b = import.meta.env.BASE_URL ?? "/";
+  return b.replace(/\/$/, "");
+}
+
 export function redirectUriForOrigin(origin: string = window.location.origin): string {
-  return `${origin.replace(/\/$/, "")}${REDIRECT_PATH}`;
+  return `${origin.replace(/\/$/, "")}${basePathPrefix()}${REDIRECT_PATH}`;
 }
 
 /**

@@ -1,5 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { beginOAuth, completeOAuth } from "./oauth";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { beginOAuth, completeOAuth, redirectUriForOrigin } from "./oauth";
 import { deriveCodeChallenge } from "./pkce";
 import { loadPendingOAuth, savePendingOAuth } from "./storage";
 import type { PendingOAuthState } from "./types";
@@ -70,6 +70,33 @@ describe("beginOAuth", () => {
     await beginOAuth("http://localhost:1940/api/", "full", fetchImpl);
     expect(fetchImpl.mock.calls[0]?.[0]).toBe(
       "http://localhost:1940/.well-known/oauth-authorization-server",
+    );
+  });
+});
+
+describe("redirectUriForOrigin under VITE_BASE_PATH", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("defaults to {origin}/oauth/callback when base is /", () => {
+    vi.stubEnv("BASE_URL", "/");
+    expect(redirectUriForOrigin("http://localhost:3000")).toBe(
+      "http://localhost:3000/oauth/callback",
+    );
+  });
+
+  it("includes the base path when Notes is mounted under a sub-path", () => {
+    vi.stubEnv("BASE_URL", "/notes/");
+    expect(redirectUriForOrigin("http://host.example")).toBe(
+      "http://host.example/notes/oauth/callback",
+    );
+  });
+
+  it("strips a single trailing slash on the origin and the base", () => {
+    vi.stubEnv("BASE_URL", "/notes/");
+    expect(redirectUriForOrigin("http://host.example/")).toBe(
+      "http://host.example/notes/oauth/callback",
     );
   });
 });

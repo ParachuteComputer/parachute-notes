@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { PWA_MANIFEST } from "./pwa-manifest";
+import { PWA_MANIFEST, buildPwaManifest } from "./pwa-manifest";
 
 describe("PWA_MANIFEST", () => {
   it("has the fields Chrome requires for installability", () => {
@@ -29,5 +29,19 @@ describe("PWA_MANIFEST", () => {
     expect(() => JSON.stringify(PWA_MANIFEST)).not.toThrow();
     const round = JSON.parse(JSON.stringify(PWA_MANIFEST));
     expect(round.name).toBe(PWA_MANIFEST.name);
+  });
+});
+
+describe("buildPwaManifest under a sub-path", () => {
+  it("threads the base into id, start_url, and scope so installed PWAs land on the right route", () => {
+    const m = buildPwaManifest("/notes/");
+    expect(m.id).toBe("/notes/");
+    expect(m.start_url).toBe("/notes/");
+    expect(m.scope).toBe("/notes/");
+  });
+
+  it("normalizes a base passed without a trailing slash", () => {
+    const m = buildPwaManifest("/notes");
+    expect(m.start_url).toBe("/notes/");
   });
 });
