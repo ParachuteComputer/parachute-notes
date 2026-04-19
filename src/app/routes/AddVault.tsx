@@ -54,7 +54,8 @@ export function AddVault() {
     <div className="mx-auto max-w-xl px-6 py-16">
       <h1 className="mb-2 font-serif text-4xl tracking-tight">Connect a vault</h1>
       <p className="mb-8 text-fg-muted">
-        Paste the URL of a Parachute Vault. You'll be taken to its consent page to authorize Lens.
+        Paste the URL of a Parachute Vault. You'll be taken to its consent page to authorize
+        Parachute Notes.
       </p>
 
       <form onSubmit={onSubmit} className="space-y-4">

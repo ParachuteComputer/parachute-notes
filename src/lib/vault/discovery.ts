@@ -55,7 +55,7 @@ export async function registerClient(
     method: "POST",
     headers: { "Content-Type": "application/json", Accept: "application/json" },
     body: JSON.stringify({
-      client_name: "Parachute Lens",
+      client_name: "Parachute Notes",
       redirect_uris: [redirectUri],
       grant_types: ["authorization_code"],
       response_types: ["code"],

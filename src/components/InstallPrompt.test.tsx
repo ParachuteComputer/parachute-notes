@@ -74,7 +74,7 @@ describe("InstallPrompt", () => {
     await act(async () => {
       fireEvent.click(btn);
     });
-    expect(screen.getByText(/add lens to your home screen/i)).toBeInTheDocument();
+    expect(screen.getByText(/add parachute notes to your home screen/i)).toBeInTheDocument();
     expect(screen.getByText(/share icon/i)).toBeInTheDocument();
   });
 });

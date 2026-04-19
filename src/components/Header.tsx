@@ -27,7 +27,7 @@ export function Header() {
     <header className="sticky top-0 z-10 border-b border-border bg-bg/90 backdrop-blur">
       <nav className="mx-auto flex max-w-5xl items-center justify-between gap-4 px-6 py-5">
         <Link to="/" className="font-serif text-xl tracking-tight text-fg hover:text-accent">
-          Parachute Lens
+          Parachute Notes
         </Link>
 
         <div className="flex items-center gap-3">

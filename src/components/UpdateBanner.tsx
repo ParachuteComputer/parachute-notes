@@ -19,7 +19,7 @@ export function UpdateBanner() {
 
   return (
     <output className="fixed inset-x-0 bottom-4 z-40 mx-auto flex max-w-sm items-center justify-between gap-3 rounded-md border border-border bg-card px-4 py-3 shadow-lg">
-      <p className="text-sm text-fg">A new version of Lens is available.</p>
+      <p className="text-sm text-fg">A new version of Parachute Notes is available.</p>
       <div className="flex gap-2">
         <button
           type="button"

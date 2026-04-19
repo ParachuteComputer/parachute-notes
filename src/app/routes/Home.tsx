@@ -14,9 +14,9 @@ export function Home() {
   return (
     <div className="mx-auto max-w-2xl px-6 py-20 text-center">
       <p className="mb-8 font-serif text-xl italic text-fg-muted">
-        A lens onto any Parachute Vault.
+        The default frontend for Parachute.
       </p>
-      <h1 className="mb-4 font-serif text-5xl tracking-tight">Lens</h1>
+      <h1 className="mb-4 font-serif text-5xl tracking-tight">Notes</h1>
 
       {foundOrigin ? (
         <>

@@ -55,7 +55,7 @@ function InstallStateSection() {
         <span className="mr-2 inline-block rounded-full bg-emerald-500/20 px-2 py-0.5 text-xs font-medium text-emerald-300">
           Installed
         </span>
-        Parachute Lens is running as an installed app on this device.
+        Parachute Notes is running as an installed app on this device.
       </p>
     </section>
   );

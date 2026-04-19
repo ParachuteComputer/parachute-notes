@@ -8,9 +8,9 @@ describe("App", () => {
     sessionStorage.clear();
   });
 
-  it("renders the Lens wordmark and the connect CTA when no vaults exist", () => {
+  it("renders the Parachute Notes wordmark and the connect CTA when no vaults exist", () => {
     render(<App />);
-    expect(screen.getByRole("link", { name: /parachute lens/i })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /parachute notes/i })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /connect a vault/i })).toBeInTheDocument();
     expect(screen.getByText(/no vault connected/i)).toBeInTheDocument();
   });

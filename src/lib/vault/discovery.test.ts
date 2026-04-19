@@ -68,7 +68,7 @@ describe("registerClient", () => {
       {
         json: {
           client_id: "abc-123",
-          client_name: "Parachute Lens",
+          client_name: "Parachute Notes",
           redirect_uris: ["http://localhost/oauth/callback"],
         },
       },
@@ -86,7 +86,7 @@ describe("registerClient", () => {
     expect(init.method).toBe("POST");
     const body = JSON.parse(init.body as string);
     expect(body.redirect_uris).toEqual(["http://localhost/oauth/callback"]);
-    expect(body.client_name).toBe("Parachute Lens");
+    expect(body.client_name).toBe("Parachute Notes");
   });
 
   it("throws on non-OK response", async () => {

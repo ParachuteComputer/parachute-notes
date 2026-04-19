@@ -1,20 +1,20 @@
-# Parachute Lens
+# Parachute Notes
 
-A lightweight web UI for any [Parachute Vault](https://github.com/ParachuteComputer/parachute-vault).
+The default frontend for [Parachute](https://parachute.computer). Browse, edit, and capture in any [Parachute Vault](https://github.com/ParachuteComputer/parachute-vault), from any device.
 
-Lens is a static single-page app that speaks directly to your vault over its HTTP API. Point it at any vault URL, do OAuth, and browse, edit, create, and visualize your notes. No opinion about how you organize your vault — just a good lens onto what's there.
+Parachute Notes is a static single-page app that speaks directly to your vault over its HTTP API. Point it at any vault URL, do OAuth, and browse, edit, create, and visualize your notes. No opinion about how you organize your vault — just a good lens onto what's there.
 
 ## Status
 
 v1 shipped; v0.2 in progress — offline-capable PWA.
 
-## Install Parachute Lens
+## Install Parachute Notes
 
-Lens is installable as a Progressive Web App. Once installed, it runs in its own window, launches from your home screen or dock, and (from v0.2 onward) keeps working when you're offline.
+Parachute Notes is installable as a Progressive Web App. Once installed, it runs in its own window, launches from your home screen or dock, and (from v0.2 onward) keeps working when you're offline.
 
-- **Desktop Chrome / Edge** — visit your hosted Lens, click **Install app** in the header, or use the browser's install icon in the address bar.
+- **Desktop Chrome / Edge** — visit your hosted Parachute Notes, click **Install app** in the header, or use the browser's install icon in the address bar.
 - **Android Chrome** — tap **Install app**, or use the browser menu → **Install app**.
-- **iOS Safari** — tap the Share icon, then **Add to Home Screen**. (Safari doesn't expose a JS install prompt, so Lens shows a hint with the steps.)
+- **iOS Safari** — tap the Share icon, then **Add to Home Screen**. (Safari doesn't expose a JS install prompt, so Parachute Notes shows a hint with the steps.)
 
 A few iOS quirks worth knowing:
 

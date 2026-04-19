@@ -1,4 +1,4 @@
-# parachute-lens
+# parachute-notes
 
 ## Tag roles — the per-vault customization primitive
 

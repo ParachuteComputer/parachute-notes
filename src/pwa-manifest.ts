@@ -2,9 +2,10 @@ import type { ManifestOptions } from "vite-plugin-pwa";
 
 export const PWA_MANIFEST: Partial<ManifestOptions> = {
   id: "/",
-  name: "Parachute Lens",
-  short_name: "Lens",
-  description: "A lightweight web UI for any Parachute Vault.",
+  name: "Parachute Notes",
+  short_name: "Notes",
+  description:
+    "The default frontend for Parachute. Browse, edit, and capture in any Parachute Vault.",
   theme_color: "#4a7c59",
   background_color: "#faf8f4",
   display: "standalone",

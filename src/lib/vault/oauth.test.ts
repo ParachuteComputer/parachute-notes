@@ -18,7 +18,7 @@ const validMetadata = {
 
 const clientReg = {
   client_id: "client-123",
-  client_name: "Parachute Lens",
+  client_name: "Parachute Notes",
   redirect_uris: ["http://localhost:3000/oauth/callback"],
 };
 
