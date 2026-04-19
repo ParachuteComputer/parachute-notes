@@ -78,6 +78,27 @@ export function useAllNotesForSwitcher(enabled: boolean) {
   });
 }
 
+// Fetches a capped window of recent notes (by vault's default sort, desc) for
+// date-grouped surfaces like /today and /calendar. The vault has no date-range
+// filter, so we client-side bucket. A vault with more than the cap gets the
+// most-recent N — older days on the calendar show empty.
+export function useNotesForDateViews() {
+  const client = useActiveVaultClient();
+  const activeId = useVaultStore((s) => s.activeVaultId);
+
+  return useQuery({
+    queryKey: ["notesForDateViews", activeId],
+    enabled: !!client,
+    queryFn: () => {
+      const params = new URLSearchParams();
+      params.set("sort", "desc");
+      params.set("limit", String(VAULT_GRAPH_NOTE_CAP));
+      return client!.queryNotes(params);
+    },
+    staleTime: 60_000,
+  });
+}
+
 export function useAllNotesWithLinks() {
   const client = useActiveVaultClient();
   const activeId = useVaultStore((s) => s.activeVaultId);

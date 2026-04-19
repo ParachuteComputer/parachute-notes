@@ -111,6 +111,8 @@ describe("computeResults", () => {
       "new",
       "capture",
       "graph",
+      "today",
+      "calendar",
       "tags",
       "notes",
       "pinned",

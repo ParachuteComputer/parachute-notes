@@ -6,6 +6,7 @@ import { QueryProvider } from "@/providers/QueryProvider";
 import { SyncProvider } from "@/providers/SyncProvider";
 import { BrowserRouter, Route, Routes } from "react-router";
 import { AddVault } from "./routes/AddVault";
+import { Calendar } from "./routes/Calendar";
 import { Capture } from "./routes/Capture";
 import { Home } from "./routes/Home";
 import { NoteEditor } from "./routes/NoteEditor";
@@ -15,6 +16,7 @@ import { Notes } from "./routes/Notes";
 import { OAuthCallback } from "./routes/OAuthCallback";
 import { Settings } from "./routes/Settings";
 import { Tags } from "./routes/Tags";
+import { Today } from "./routes/Today";
 import { VaultGraph } from "./routes/VaultGraph";
 import { Vaults } from "./routes/Vaults";
 
@@ -38,6 +40,8 @@ export function App() {
                 <Route path="/new" element={<NoteNew />} />
                 <Route path="/capture" element={<Capture />} />
                 <Route path="/graph" element={<VaultGraph />} />
+                <Route path="/today" element={<Today />} />
+                <Route path="/calendar" element={<Calendar />} />
                 <Route path="/notes/:id" element={<NoteView />} />
                 <Route path="/notes/:id/edit" element={<NoteEditor />} />
                 <Route path="/add" element={<AddVault />} />
