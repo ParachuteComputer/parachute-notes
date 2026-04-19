@@ -4,6 +4,7 @@ export * from "./graph";
 export * from "./neighborhood";
 export * from "./note-query";
 export * from "./oauth";
+export * from "./parachute-json";
 export * from "./pkce";
 export * from "./probe";
 export * from "./queries";

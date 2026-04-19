@@ -1,52 +1,64 @@
 import { useEffect, useState } from "react";
 import { discoverAuthServer } from "./discovery";
+import { fetchParachuteJson, pickVault } from "./parachute-json";
 import { useVaultStore } from "./store";
 
 export type ProbeStatus = "probing" | "found" | "not-found" | "skipped";
 
 export interface ProbeResult {
   status: ProbeStatus;
+  // Full vault URL (origin + `/vault/<name>`), not just origin. Naming kept
+  // for backwards-compat with existing callers.
   origin: string | null;
 }
 
 const DEFAULT_TIMEOUT_MS = 2500;
 
-// Probe an origin for a Parachute Vault by fetching RFC 8414 metadata. Returns
-// the origin on success, null on any failure (network, non-200, bad metadata,
-// timeout). If the given origin has a non-default port and fails, retry with
-// the port stripped — covers reverse-proxy setups (e.g. Tailscale serve) where
-// Lens is reachable at :8443 but the vault is on :443.
+// Probe an origin for a Parachute Vault. Two paths:
+//
+//   1. Ecosystem discovery: fetch `${origin}/.well-known/parachute.json` and
+//      pick a vault entry (name=default, else first). Validate by hitting its
+//      OAuth metadata.
+//   2. Direct: probe `${input}/.well-known/oauth-authorization-server` — for
+//      when the user pasted a vault URL directly (e.g. `https://h/vault/work`)
+//      without a parachute.json registry on the origin.
+//
+// Returns the discovered vault URL (full path including `/vault/<name>`) or
+// null if neither path resolves.
 export async function probeVaultAtOrigin(
   origin: string,
   timeoutMs: number = DEFAULT_TIMEOUT_MS,
   fetchImpl: typeof fetch = fetch.bind(globalThis),
 ): Promise<string | null> {
-  const tryOnce = async (candidate: string): Promise<string | null> => {
-    const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), timeoutMs);
-    const withSignal: typeof fetch = (input, init) =>
-      fetchImpl(input, { ...(init ?? {}), signal: ctrl.signal });
-    try {
-      await discoverAuthServer(candidate, withSignal);
-      return candidate;
-    } catch {
-      return null;
-    } finally {
-      clearTimeout(timer);
+  const manifest = await fetchParachuteJson(origin, timeoutMs, fetchImpl);
+  if (manifest) {
+    const chosen = pickVault(manifest);
+    if (chosen) {
+      const validated = await tryDiscoverAuthServer(chosen.url, timeoutMs, fetchImpl);
+      if (validated) return validated;
     }
-  };
+  }
 
-  const primary = await tryOnce(origin);
-  if (primary) return primary;
+  return tryDiscoverAuthServer(origin, timeoutMs, fetchImpl);
+}
 
+async function tryDiscoverAuthServer(
+  candidate: string,
+  timeoutMs: number,
+  fetchImpl: typeof fetch,
+): Promise<string | null> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  const withSignal: typeof fetch = (input, init) =>
+    fetchImpl(input, { ...(init ?? {}), signal: ctrl.signal });
   try {
-    const url = new URL(origin);
-    if (url.port) {
-      url.port = "";
-      return await tryOnce(url.origin);
-    }
-  } catch {}
-  return null;
+    await discoverAuthServer(candidate, withSignal);
+    return candidate;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 // Probe the current window's origin on mount, but skip if the user already has

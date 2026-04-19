@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { normalizeVaultUrl, vaultIdFromUrl } from "./url";
+import { isLegacyVaultUrl, normalizeVaultUrl, vaultIdFromUrl } from "./url";
 
 describe("normalizeVaultUrl", () => {
   it("adds https when scheme is missing", () => {
@@ -63,5 +63,25 @@ describe("vaultIdFromUrl", () => {
     expect(vaultIdFromUrl("https://vault.example.com/vaults/work")).toBe(
       "vault.example.com_vaults_work",
     );
+  });
+});
+
+describe("isLegacyVaultUrl", () => {
+  it("flags origin-only URLs (pre-PR-7 default)", () => {
+    expect(isLegacyVaultUrl("https://vault.example.com")).toBe(true);
+    expect(isLegacyVaultUrl("http://localhost:1940")).toBe(true);
+  });
+
+  it("flags the previous `/vaults/<name>/` plural scheme", () => {
+    expect(isLegacyVaultUrl("https://vault.example.com/vaults/work")).toBe(true);
+  });
+
+  it("accepts current `/vault/<name>` URLs", () => {
+    expect(isLegacyVaultUrl("https://vault.example.com/vault/default")).toBe(false);
+    expect(isLegacyVaultUrl("http://localhost:1940/vault/work")).toBe(false);
+  });
+
+  it("returns false for unparseable input rather than misclassifying", () => {
+    expect(isLegacyVaultUrl("not-a-url")).toBe(false);
   });
 });

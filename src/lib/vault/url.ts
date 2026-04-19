@@ -31,6 +31,7 @@ export function normalizeVaultUrl(input: string): string {
     "/mcp",
     "/.well-known/oauth-authorization-server",
     "/.well-known/oauth-protected-resource",
+    "/.well-known/parachute.json",
     "/oauth/authorize",
     "/oauth/token",
     "/oauth/register",
@@ -48,4 +49,19 @@ export function normalizeVaultUrl(input: string): string {
 
 export function vaultIdFromUrl(url: string): string {
   return url.replace(/^https?:\/\//, "").replace(/[^\w.-]+/g, "_");
+}
+
+// Vault PR 7 moved every endpoint under `/vault/<name>/`. Older stored
+// VaultRecords whose URL is origin-only (or the previous `/vaults/<name>/`
+// plural) won't reach the new endpoints and their tokens are invalid because
+// vault's issuer changed. Detect them so the Vaults page can prompt re-add.
+export function isLegacyVaultUrl(url: string): boolean {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return false;
+  }
+  const segments = parsed.pathname.split("/").filter(Boolean);
+  return !(segments.length >= 2 && segments[0] === "vault");
 }

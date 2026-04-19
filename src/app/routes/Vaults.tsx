@@ -1,4 +1,4 @@
-import { useVaultStore } from "@/lib/vault";
+import { isLegacyVaultUrl, useVaultStore } from "@/lib/vault";
 import { Link } from "react-router";
 
 export function Vaults() {
@@ -27,47 +27,62 @@ export function Vaults() {
         <ul className="space-y-3">
           {list.map((vault) => {
             const isActive = vault.id === activeVaultId;
+            const isLegacy = isLegacyVaultUrl(vault.url);
             return (
-              <li
-                key={vault.id}
-                className="flex items-center justify-between rounded-lg border border-border bg-card p-4"
-              >
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="font-serif text-lg text-fg">{vault.name}</span>
-                    {isActive ? (
-                      <span className="rounded bg-accent/10 px-2 py-0.5 text-xs text-accent">
-                        active
+              <li key={vault.id} className="rounded-lg border border-border bg-card p-4">
+                <div className="flex items-center justify-between gap-4">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="font-serif text-lg text-fg">{vault.name}</span>
+                      {isActive ? (
+                        <span className="rounded bg-accent/10 px-2 py-0.5 text-xs text-accent">
+                          active
+                        </span>
+                      ) : null}
+                      <span className="rounded border border-border px-2 py-0.5 text-xs text-fg-dim">
+                        {vault.scope}
                       </span>
-                    ) : null}
-                    <span className="rounded border border-border px-2 py-0.5 text-xs text-fg-dim">
-                      {vault.scope}
-                    </span>
+                      {isLegacy ? (
+                        <span className="rounded border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-xs text-amber-500">
+                          needs reconnect
+                        </span>
+                      ) : null}
+                    </div>
+                    <p className="mt-1 truncate font-mono text-xs text-fg-muted">{vault.url}</p>
                   </div>
-                  <p className="mt-1 font-mono text-xs text-fg-muted">{vault.url}</p>
-                </div>
-                <div className="flex items-center gap-4 text-sm">
-                  {!isActive ? (
+                  <div className="flex shrink-0 items-center gap-4 text-sm">
+                    {!isActive ? (
+                      <button
+                        type="button"
+                        onClick={() => setActiveVault(vault.id)}
+                        className="text-fg-muted hover:text-accent"
+                      >
+                        Make active
+                      </button>
+                    ) : null}
                     <button
                       type="button"
-                      onClick={() => setActiveVault(vault.id)}
-                      className="text-fg-muted hover:text-accent"
+                      onClick={() => {
+                        if (confirm(`Remove ${vault.name}? The access token will be deleted.`)) {
+                          removeVault(vault.id);
+                        }
+                      }}
+                      className="text-red-400 hover:text-red-300"
                     >
-                      Make active
+                      Remove
                     </button>
-                  ) : null}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (confirm(`Remove ${vault.name}? The access token will be deleted.`)) {
-                        removeVault(vault.id);
-                      }
-                    }}
-                    className="text-red-400 hover:text-red-300"
-                  >
-                    Remove
-                  </button>
+                  </div>
                 </div>
+                {isLegacy ? (
+                  <p className="mt-3 rounded border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs text-amber-500">
+                    Vault now serves under <code>/vault/&lt;name&gt;/</code>. This stored URL is
+                    from the older scheme and won't reach the new endpoints. Remove this entry and{" "}
+                    <Link to="/add" className="underline">
+                      add it again
+                    </Link>{" "}
+                    — discovery will pick the right URL automatically.
+                  </p>
+                ) : null}
               </li>
             );
           })}
