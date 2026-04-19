@@ -1,7 +1,8 @@
 import { Settings } from "@/app/routes/Settings";
 import { useToastStore } from "@/lib/toast/store";
 import { useVaultStore } from "@/lib/vault/store";
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -38,14 +39,24 @@ function seedActiveVault() {
 }
 
 function renderSettings() {
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
   return render(
-    <MemoryRouter initialEntries={["/settings"]}>
-      <Routes>
-        <Route path="/settings" element={<Settings />} />
-        <Route path="/" element={<div>HomePage</div>} />
-      </Routes>
-    </MemoryRouter>,
+    <QueryClientProvider client={qc}>
+      <MemoryRouter initialEntries={["/settings"]}>
+        <Routes>
+          <Route path="/settings" element={<Settings />} />
+          <Route path="/" element={<div>HomePage</div>} />
+        </Routes>
+      </MemoryRouter>
+    </QueryClientProvider>,
   );
+}
+
+function scribeSection(): HTMLElement {
+  const heading = screen.getByRole("heading", { name: /transcription/i });
+  const section = heading.closest("section");
+  if (!section) throw new Error("scribe section not found");
+  return section as HTMLElement;
 }
 
 describe("Settings route", () => {
@@ -80,7 +91,7 @@ describe("Settings route", () => {
       fireEvent.change(urlInput, { target: { value: "http://scribe.dev" } });
     });
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: /^save$/i }));
+      fireEvent.click(within(scribeSection()).getByRole("button", { name: /^save$/i }));
     });
     const stored = JSON.parse(localStorage.getItem("lens:scribe:dev") ?? "{}");
     expect(stored.url).toBe("http://scribe.dev");
@@ -127,8 +138,56 @@ describe("Settings route", () => {
     expect(urlInput.value).toBe("http://scribe.dev");
     vi.spyOn(window, "confirm").mockReturnValue(true);
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: /^clear$/i }));
+      fireEvent.click(within(scribeSection()).getByRole("button", { name: /^clear$/i }));
     });
     expect(localStorage.getItem("lens:scribe:dev")).toBeNull();
+  });
+
+  it("renders tag roles with defaults and saves overrides to localStorage", async () => {
+    renderSettings();
+    const section = screen
+      .getByRole("heading", { name: /tag roles/i })
+      .closest("section") as HTMLElement;
+    const pinnedInput = within(section).getByLabelText(/pinned tag role/i);
+    expect((pinnedInput as HTMLInputElement).value).toBe("pinned");
+
+    await act(async () => {
+      fireEvent.change(pinnedInput, { target: { value: "starred" } });
+    });
+    await act(async () => {
+      fireEvent.click(within(section).getByRole("button", { name: /^save$/i }));
+    });
+    const stored = JSON.parse(localStorage.getItem("lens:tag-roles:dev") ?? "{}") as {
+      pinned: string;
+      archived: string;
+    };
+    expect(stored.pinned).toBe("starred");
+    expect(stored.archived).toBe("archived");
+  });
+
+  it("reset-to-defaults wipes the stored tag roles", async () => {
+    localStorage.setItem(
+      "lens:tag-roles:dev",
+      JSON.stringify({
+        pinned: "starred",
+        archived: "done",
+        captureVoice: "memo",
+        captureText: "inbox",
+      }),
+    );
+    renderSettings();
+    const section = screen
+      .getByRole("heading", { name: /tag roles/i })
+      .closest("section") as HTMLElement;
+    expect((within(section).getByLabelText(/pinned tag role/i) as HTMLInputElement).value).toBe(
+      "starred",
+    );
+    await act(async () => {
+      fireEvent.click(within(section).getByRole("button", { name: /reset to defaults/i }));
+    });
+    expect(localStorage.getItem("lens:tag-roles:dev")).toBeNull();
+    expect((within(section).getByLabelText(/pinned tag role/i) as HTMLInputElement).value).toBe(
+      "pinned",
+    );
   });
 });
