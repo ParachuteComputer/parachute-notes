@@ -41,6 +41,9 @@ export function Header() {
               <Link to="/graph" className="text-sm text-fg-muted hover:text-accent">
                 Graph
               </Link>
+              <Link to="/capture" className="text-sm text-fg-muted hover:text-accent">
+                + Memo
+              </Link>
               <label htmlFor="vault-switcher" className="sr-only">
                 Active vault
               </label>
