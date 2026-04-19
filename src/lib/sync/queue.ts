@@ -378,3 +378,37 @@ async function replaceMarkerIfPresent(
 export async function clearAuthHalt(db: LensDB): Promise<void> {
   await db.delete("meta", AUTH_HALT_META);
 }
+
+// Reset a stashed row so the next drain picks it back up. Used by the sync
+// status panel's "Retry" action on a needs-human row. Clears the error
+// counters so the row gets a fresh attempt budget, not a backoff from its
+// previous failure.
+export async function retryRow(db: LensDB, seq: number): Promise<void> {
+  const row = await db.get("pending", seq);
+  if (!row) return;
+  await db.put("pending", {
+    ...row,
+    status: "pending",
+    attemptCount: 0,
+    nextAttemptAt: 0,
+    lastError: undefined,
+  });
+}
+
+// Drop a single pending row — used by "Discard" on a stashed row.
+export async function discardRow(db: LensDB, seq: number): Promise<void> {
+  await db.delete("pending", seq);
+}
+
+// Nuke every pending row for `vaultId`. Destructive escape hatch when a row
+// is wedged in a way the user can't unpick inline. Does not touch blobs or
+// id-map — those are cleaned by their own GC paths.
+export async function clearPendingForVault(db: LensDB, vaultId: string): Promise<number> {
+  const rows = await listPending(db, vaultId);
+  const tx = db.transaction("pending", "readwrite");
+  for (const row of rows) {
+    await tx.store.delete(row.seq);
+  }
+  await tx.done;
+  return rows.length;
+}

@@ -11,7 +11,19 @@ export {
   resolveBlobPath,
   resolveNoteId,
 } from "./id-map";
-export { AUTH_HALT_META, clearAuthHalt, countPending, drain, enqueue, listPending } from "./queue";
+export {
+  AUTH_HALT_META,
+  clearAuthHalt,
+  clearPendingForVault,
+  countPending,
+  discardRow,
+  drain,
+  enqueue,
+  listPending,
+  retryRow,
+} from "./queue";
+export { useQueueStatus } from "./useQueueStatus";
+export type { AuthHaltInfo, QueueStatus } from "./useQueueStatus";
 export { estimate, isPersisted, type QuotaReport, requestPersistent } from "./storage-quota";
 export type {
   BlobPathMapRow,

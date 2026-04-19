@@ -21,6 +21,26 @@ export interface SyncContext {
   blobStore: BlobStore | null;
   engine: SyncEngine | null;
   isOnline: boolean;
+  // Flipped by the engine around each drain attempt. UI shows a subtle
+  // "syncing" affordance while true.
+  isDraining: boolean;
+  // Wall-clock ms of the most recent drain that actually flushed rows. Null
+  // if nothing has drained since mount. Persisted to localStorage so the
+  // status panel can show a meaningful "Last synced" across reloads.
+  lastSyncedAt: number | null;
+}
+
+const LAST_SYNCED_KEY = "lens:sync:lastSyncedAt";
+
+function loadLastSyncedAt(): number | null {
+  try {
+    const raw = localStorage.getItem(LAST_SYNCED_KEY);
+    if (!raw) return null;
+    const n = Number(raw);
+    return Number.isFinite(n) ? n : null;
+  } catch {
+    return null;
+  }
 }
 
 const SyncCtx = createContext<SyncContext>({
@@ -28,18 +48,31 @@ const SyncCtx = createContext<SyncContext>({
   blobStore: null,
   engine: null,
   isOnline: true,
+  isDraining: false,
+  lastSyncedAt: null,
 });
 
 export function useSync(): SyncContext {
   return useContext(SyncCtx);
 }
 
+// Provider-scoped IndexedDB lifecycle: the DB handle is opened on mount and
+// closed on unmount. When writing tests that unmount route components which
+// perform fire-and-forget enqueues during cleanup (e.g. TextCapture's
+// unmount-flush), be aware that the provider's cleanup closes the DB in the
+// same tick — if both unmount together, in-flight IDB transactions race the
+// close and fake-indexeddb raises InvalidStateError. Real SPA navigation
+// doesn't tear down the provider, so to reproduce the true shape in tests,
+// toggle only the inner component's mount (see TextCapture.test.tsx for the
+// pattern) rather than unmounting the whole render tree.
 export function SyncProvider({ children }: { children: ReactNode }): ReactNode {
   const [db, setDb] = useState<LensDB | null>(null);
   const [blobStore, setBlobStore] = useState<BlobStore | null>(null);
   const [isOnline, setIsOnline] = useState(
     typeof navigator !== "undefined" ? navigator.onLine : true,
   );
+  const [isDraining, setIsDraining] = useState(false);
+  const [lastSyncedAt, setLastSyncedAt] = useState<number | null>(() => loadLastSyncedAt());
   const client = useActiveVaultClient();
   const activeVaultId = useVaultStore((s) => s.activeVaultId);
   const qc = useQueryClient();
@@ -104,8 +137,19 @@ export function SyncProvider({ children }: { children: ReactNode }): ReactNode {
         // between drains without any React-tree signal.
         return { client: c, vaultId: v, scribeSettings: loadScribeSettings(v) };
       },
+      onDrainStart: () => {
+        setIsDraining(true);
+      },
       onDrain: (outcome) => {
+        setIsDraining(false);
         if (outcome.drained > 0) {
+          const now = Date.now();
+          setLastSyncedAt(now);
+          try {
+            localStorage.setItem(LAST_SYNCED_KEY, String(now));
+          } catch {
+            // quota/private-mode — not worth surfacing
+          }
           const v = activeVaultIdRef.current;
           qcRef.current.invalidateQueries({ queryKey: ["notes", v] });
           qcRef.current.invalidateQueries({ queryKey: ["tags", v] });
@@ -122,8 +166,8 @@ export function SyncProvider({ children }: { children: ReactNode }): ReactNode {
   }, [engine]);
 
   const value = useMemo<SyncContext>(
-    () => ({ db, blobStore, engine, isOnline }),
-    [db, blobStore, engine, isOnline],
+    () => ({ db, blobStore, engine, isOnline, isDraining, lastSyncedAt }),
+    [db, blobStore, engine, isOnline, isDraining, lastSyncedAt],
   );
 
   return <SyncCtx.Provider value={value}>{children}</SyncCtx.Provider>;

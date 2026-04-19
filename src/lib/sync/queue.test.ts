@@ -9,10 +9,13 @@ import { blobRef, newLocalId, resolveNoteId } from "./id-map";
 import {
   AUTH_HALT_META,
   TRANSCRIBE_GIVE_UP_MS,
+  clearPendingForVault,
   countPending,
+  discardRow,
   drain,
   enqueue,
   listPending,
+  retryRow,
 } from "./queue";
 
 async function freshDb(): Promise<LensDB> {
@@ -587,5 +590,57 @@ describe("drain — vault isolation", () => {
     expect(out.drained).toBe(1);
     expect(deleteNote).toHaveBeenCalledWith("A1");
     expect(await countPending(db, "vB")).toBe(1);
+  });
+});
+
+describe("retryRow / discardRow / clearPendingForVault", () => {
+  let db: LensDB;
+  beforeEach(async () => {
+    db = await freshDb();
+  });
+  afterEach(() => db.close());
+
+  it("retryRow resets status, attemptCount, nextAttemptAt, and lastError", async () => {
+    const row = await enqueue(db, { kind: "delete-note", targetId: "n1" }, { vaultId: "v1" });
+    // Simulate a needs-human stash by mutating the row directly.
+    await db.put("pending", {
+      ...row,
+      status: "needs-human",
+      attemptCount: 5,
+      nextAttemptAt: Date.now() + 60_000,
+      lastError: "boom",
+    });
+
+    await retryRow(db, row.seq);
+
+    const after = await db.get("pending", row.seq);
+    expect(after?.status).toBe("pending");
+    expect(after?.attemptCount).toBe(0);
+    expect(after?.nextAttemptAt).toBe(0);
+    expect(after?.lastError).toBeUndefined();
+  });
+
+  it("retryRow is a no-op when seq is missing (already discarded)", async () => {
+    await expect(retryRow(db, 9999)).resolves.toBeUndefined();
+  });
+
+  it("discardRow removes a single row but leaves peers alone", async () => {
+    const a = await enqueue(db, { kind: "delete-note", targetId: "a" }, { vaultId: "v1" });
+    await enqueue(db, { kind: "delete-note", targetId: "b" }, { vaultId: "v1" });
+    await discardRow(db, a.seq);
+    const rows = await listPending(db, "v1");
+    expect(rows.map((r) => (r.mutation as { targetId: string }).targetId)).toEqual(["b"]);
+  });
+
+  it("clearPendingForVault wipes only the target vault's rows and reports the count", async () => {
+    await enqueue(db, { kind: "delete-note", targetId: "a" }, { vaultId: "v1" });
+    await enqueue(db, { kind: "delete-note", targetId: "b" }, { vaultId: "v1" });
+    await enqueue(db, { kind: "delete-note", targetId: "c" }, { vaultId: "v2" });
+
+    const cleared = await clearPendingForVault(db, "v1");
+
+    expect(cleared).toBe(2);
+    expect(await countPending(db, "v1")).toBe(0);
+    expect(await countPending(db, "v2")).toBe(1);
   });
 });

@@ -1,6 +1,7 @@
 import { DeleteNoteButton } from "@/components/DeleteNoteButton";
 import { MarkdownView, buildWikilinkResolver } from "@/components/MarkdownView";
 import { NeighborhoodGraph } from "@/components/NeighborhoodGraph";
+import { TranscriptionStatus } from "@/components/TranscriptionStatus";
 import { relativeTime } from "@/lib/time";
 import { useActiveVaultClient, useNote, useVaultStore } from "@/lib/vault";
 import { VaultAuthError } from "@/lib/vault/client";
@@ -80,6 +81,8 @@ function NoteBody({ note }: { note: Note }) {
             <DeleteNoteButton note={note} />
           </div>
         </header>
+
+        <TranscriptionStatus noteId={note.id} content={note.content ?? ""} />
 
         <MarkdownView content={note.content ?? ""} resolve={resolver} />
 

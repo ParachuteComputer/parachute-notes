@@ -22,6 +22,8 @@ export interface EngineOptions {
   // running in case state changes.
   resolveContext: () => EngineDrainContext | null;
   tickIntervalMs?: number;
+  // Fires right before a drain starts — UI can flip "syncing" on.
+  onDrainStart?: () => void;
   onDrain?: (outcome: DrainOutcome) => void;
 }
 
@@ -67,12 +69,17 @@ export class SyncEngine {
     }
   }
 
+  get isDraining(): boolean {
+    return this.draining;
+  }
+
   async runOnce(): Promise<DrainOutcome | null> {
     if (this.draining) return null;
     if (typeof navigator !== "undefined" && navigator.onLine === false) return null;
     const ctx = this.opts.resolveContext();
     if (!ctx) return null;
     this.draining = true;
+    this.opts.onDrainStart?.();
     try {
       const outcome = await drain({
         db: this.opts.db,

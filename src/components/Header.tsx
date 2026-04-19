@@ -1,4 +1,5 @@
 import { InstallPrompt } from "@/components/InstallPrompt";
+import { SyncStatusIndicator } from "@/components/SyncStatusIndicator";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { type VaultRecord, useVaultStore } from "@/lib/vault";
 import { Link, useNavigate } from "react-router";
@@ -69,6 +70,7 @@ export function Header() {
               <Link to="/settings" className="text-sm text-fg-muted hover:text-accent">
                 Settings
               </Link>
+              <SyncStatusIndicator />
               <InstallPrompt />
               <ThemeToggle />
             </>

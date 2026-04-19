@@ -1,7 +1,8 @@
+import { isStandalone } from "@/lib/pwa";
 import { type ScribeSettings, scribeHealth, useScribeSettings } from "@/lib/scribe";
 import { useToastStore } from "@/lib/toast/store";
 import { useVaultStore } from "@/lib/vault";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, Navigate } from "react-router";
 
 // Per-vault settings UI. v0.2 only surfaces scribe because it's the first
@@ -26,7 +27,28 @@ export function Settings() {
       </header>
 
       <ScribeSettingsSection vaultId={activeVault.id} />
+      <InstallStateSection />
     </div>
+  );
+}
+
+function InstallStateSection() {
+  // matchMedia is only reliable at render time on some browsers, so sample
+  // once on mount.
+  const [installed, setInstalled] = useState(false);
+  useEffect(() => {
+    setInstalled(isStandalone());
+  }, []);
+  if (!installed) return null;
+  return (
+    <section className="mt-6 rounded-md border border-border bg-card p-4 text-sm">
+      <p className="text-fg-muted">
+        <span className="mr-2 inline-block rounded-full bg-emerald-500/20 px-2 py-0.5 text-xs font-medium text-emerald-300">
+          Installed
+        </span>
+        Parachute Lens is running as an installed app on this device.
+      </p>
+    </section>
   );
 }
 
