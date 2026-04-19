@@ -1,3 +1,4 @@
+import { InstallPrompt } from "@/components/InstallPrompt";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { type VaultRecord, useVaultStore } from "@/lib/vault";
 import { Link, useNavigate } from "react-router";
@@ -62,11 +63,13 @@ export function Header() {
               >
                 Manage
               </button>
+              <InstallPrompt />
               <ThemeToggle />
             </>
           ) : (
             <>
               <span className="text-sm text-fg-dim">No vault connected</span>
+              <InstallPrompt />
               <ThemeToggle />
             </>
           )}

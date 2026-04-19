@@ -7,6 +7,8 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
+      // vite-plugin-pwa only resolves this virtual at build time.
+      "virtual:pwa-register/react": path.resolve(__dirname, "./src/test/stubs/pwa-register.ts"),
     },
   },
   test: {

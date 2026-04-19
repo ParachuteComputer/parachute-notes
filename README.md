@@ -6,7 +6,21 @@ Lens is a static single-page app that speaks directly to your vault over its HTT
 
 ## Status
 
-v1, in active use. Launching alongside Parachute Vault.
+v1 shipped; v0.2 in progress — offline-capable PWA.
+
+## Install Parachute Lens
+
+Lens is installable as a Progressive Web App. Once installed, it runs in its own window, launches from your home screen or dock, and (from v0.2 onward) keeps working when you're offline.
+
+- **Desktop Chrome / Edge** — visit your hosted Lens, click **Install app** in the header, or use the browser's install icon in the address bar.
+- **Android Chrome** — tap **Install app**, or use the browser menu → **Install app**.
+- **iOS Safari** — tap the Share icon, then **Add to Home Screen**. (Safari doesn't expose a JS install prompt, so Lens shows a hint with the steps.)
+
+A few iOS quirks worth knowing:
+
+- iOS caps PWA storage at roughly 50 MB per app.
+- Apple may evict data from a PWA that hasn't been opened in a while.
+- There is no `beforeinstallprompt` event on iOS — the Add to Home Screen flow is manual.
 
 ## Quick start
 

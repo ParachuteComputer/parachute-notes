@@ -1,5 +1,6 @@
 import { Header } from "@/components/Header";
 import { Toaster } from "@/components/Toaster";
+import { UpdateBanner } from "@/components/UpdateBanner";
 import { QueryProvider } from "@/providers/QueryProvider";
 import { BrowserRouter, Route, Routes } from "react-router";
 import { AddVault } from "./routes/AddVault";
@@ -19,6 +20,7 @@ export function App() {
       <BrowserRouter>
         <div className="min-h-dvh bg-bg text-fg">
           <Toaster />
+          <UpdateBanner />
           <Header />
           <main>
             <Routes>
