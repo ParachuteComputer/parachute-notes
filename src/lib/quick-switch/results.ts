@@ -93,6 +93,20 @@ export const COMMANDS: Array<{
     keywords: ["archived", "archive"],
     action: { type: "navigate", to: "/archived" },
   },
+  {
+    id: "untagged",
+    label: "Untagged",
+    description: "Notes with no tags — quick-tag inline",
+    keywords: ["untagged", "unfiled", "inbox"],
+    action: { type: "navigate", to: "/untagged" },
+  },
+  {
+    id: "orphaned",
+    label: "Orphaned",
+    description: "Notes with no inbound or outbound links",
+    keywords: ["orphaned", "orphans", "isolated", "unlinked"],
+    action: { type: "navigate", to: "/orphaned" },
+  },
 ];
 
 function matchesAny(keywords: string[], q: string): number | null {

@@ -117,6 +117,8 @@ describe("computeResults", () => {
       "notes",
       "pinned",
       "archived",
+      "untagged",
+      "orphaned",
     ]);
   });
 });

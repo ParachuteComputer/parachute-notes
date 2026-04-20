@@ -205,7 +205,8 @@ describe("Notes route", () => {
     render(<Notes />, { wrapper: Wrapper });
 
     await screen.findByText("pinned-note");
-    const rows = screen.getAllByRole("listitem");
+    const list = screen.getByRole("list", { name: "Notes" });
+    const rows = within(list).getAllByRole("listitem");
     const firstRow = within(rows[0]!);
     expect(firstRow.getByText("pinned-note")).toBeInTheDocument();
     // Pin indicator visible on the pinned row.
@@ -345,6 +346,88 @@ describe("Notes route", () => {
     });
     expect(treeCall).toBeUndefined();
     expect(screen.queryByRole("complementary", { name: /path tree/i })).toBeNull();
+  });
+
+  it("preset=untagged sends has_tags=false and hides the tag filter", async () => {
+    const fetchImpl = installFetch({ notes: [], tags: [] });
+    render(<Notes preset="untagged" />, { wrapper: Wrapper });
+
+    await waitFor(() => {
+      expect(lastNotesUrl(fetchImpl)).toContain("has_tags=false");
+    });
+    expect(screen.getByRole("heading", { name: "Untagged" })).toBeInTheDocument();
+    // Tag filter is hidden — its summary disclosure is gone.
+    expect(screen.queryByText(/^Tags$/)).not.toBeInTheDocument();
+  });
+
+  it("preset=orphaned sends has_links=false", async () => {
+    const fetchImpl = installFetch({ notes: [], tags: [] });
+    render(<Notes preset="orphaned" />, { wrapper: Wrapper });
+
+    await waitFor(() => {
+      expect(lastNotesUrl(fetchImpl)).toContain("has_links=false");
+    });
+    expect(screen.getByRole("heading", { name: "Orphaned" })).toBeInTheDocument();
+  });
+
+  it("untagged row has a quick-tag control that PATCHes the note with tags.add", async () => {
+    const updated = {
+      id: "n1",
+      path: "Inbox/loose-thought",
+      tags: ["project"],
+      createdAt: "2026-04-18T10:00:00.000Z",
+      updatedAt: "2026-04-18T10:00:00.000Z",
+    };
+    const patchCalls: Array<{ url: string; body: unknown }> = [];
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input.toString();
+      const method = (init?.method ?? "GET").toUpperCase();
+      if (method === "PATCH") {
+        patchCalls.push({
+          url,
+          body: init?.body ? JSON.parse(String(init.body)) : null,
+        });
+        return {
+          ok: true,
+          status: 200,
+          json: async () => updated,
+          text: async () => "",
+        } as Response;
+      }
+      const body = url.includes("/api/tags")
+        ? [{ name: "project", count: 5 }]
+        : [
+            {
+              id: "n1",
+              path: "Inbox/loose-thought",
+              tags: [],
+              createdAt: "2026-04-18T10:00:00.000Z",
+              updatedAt: "2026-04-18T10:00:00.000Z",
+            },
+          ];
+      return {
+        ok: true,
+        status: 200,
+        json: async () => body,
+        text: async () => "",
+      } as Response;
+    });
+    vi.stubGlobal("fetch", fetchImpl);
+
+    render(<Notes preset="untagged" />, { wrapper: Wrapper });
+
+    await screen.findByText("Inbox/loose-thought");
+    fireEvent.click(screen.getByRole("button", { name: /add tag/i }));
+
+    const tagInput = await screen.findByLabelText(/tag name/i);
+    fireEvent.change(tagInput, { target: { value: "project" } });
+    fireEvent.keyDown(tagInput, { key: "Enter" });
+
+    await waitFor(() => {
+      expect(patchCalls.length).toBe(1);
+    });
+    expect(patchCalls[0]?.url).toMatch(/\/api\/notes\/n1$/);
+    expect(patchCalls[0]?.body).toEqual({ tags: { add: ["project"] } });
   });
 
   it("clicking a tree folder writes path_prefix to the URL", async () => {

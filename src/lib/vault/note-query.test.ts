@@ -57,6 +57,18 @@ describe("buildNoteQueryParams", () => {
   it("respects explicit sort direction", () => {
     expect(buildNoteQueryParams(state({ sort: "asc" })).get("sort")).toBe("asc");
   });
+
+  it("emits has_tags when set explicitly, omits when undefined", () => {
+    expect(buildNoteQueryParams(state()).get("has_tags")).toBeNull();
+    expect(buildNoteQueryParams(state({ hasTags: false })).get("has_tags")).toBe("false");
+    expect(buildNoteQueryParams(state({ hasTags: true })).get("has_tags")).toBe("true");
+  });
+
+  it("emits has_links when set explicitly, omits when undefined", () => {
+    expect(buildNoteQueryParams(state()).get("has_links")).toBeNull();
+    expect(buildNoteQueryParams(state({ hasLinks: false })).get("has_links")).toBe("false");
+    expect(buildNoteQueryParams(state({ hasLinks: true })).get("has_links")).toBe("true");
+  });
 });
 
 describe("isFilteringActive", () => {

@@ -1,4 +1,5 @@
 import { PathTree } from "@/components/PathTree";
+import { normalizeTag } from "@/components/TagEditor";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { meetsAutoThreshold, usePathTreeMode } from "@/lib/path-tree";
 import { useSaveView, useSavedViews } from "@/lib/saved-views/queries";
@@ -20,18 +21,26 @@ import {
   useNotesForPathTree,
   useTagRoles,
   useTags,
+  useUpdateNote,
   useVaultStore,
 } from "@/lib/vault";
 import { VaultAuthError } from "@/lib/vault/client";
 import type { Note, TagSummary } from "@/lib/vault/types";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, Navigate, useSearchParams } from "react-router";
 
-export type NotesPreset = "pinned" | "archived";
+export type NotesPreset = "pinned" | "archived" | "untagged" | "orphaned";
 
 const PRESET_TITLES: Record<NotesPreset, string> = {
   pinned: "Pinned",
   archived: "Archived",
+  untagged: "Untagged",
+  orphaned: "Orphaned",
+};
+
+const PRESET_SUBTITLES: Partial<Record<NotesPreset, string>> = {
+  untagged: "Notes without any tags. Add a tag inline to file them.",
+  orphaned: "Notes with no inbound or outbound links.",
 };
 
 export function Notes({ preset }: { preset?: NotesPreset } = {}) {
@@ -90,14 +99,16 @@ export function Notes({ preset }: { preset?: NotesPreset } = {}) {
   }, [preset, debouncedSearch, debouncedPrefix, selectedTags, tagMatch, sort, showArchived]);
 
   // Merge the preset role tag into the query so vault-side filter does the
-  // narrowing. User can add more tags on top via TagFilter.
+  // narrowing. User can add more tags on top via TagFilter. Untagged and
+  // orphaned use vault-native filters (has_tags / has_links) instead.
   const effectiveTags = useMemo(() => {
     if (preset === "pinned") return Array.from(new Set([roles.pinned, ...selectedTags]));
     if (preset === "archived") return Array.from(new Set([roles.archived, ...selectedTags]));
     return selectedTags;
   }, [preset, roles.pinned, roles.archived, selectedTags]);
 
-  const effectiveTagMatch: "any" | "all" = preset ? "all" : tagMatch;
+  const effectiveTagMatch: "any" | "all" =
+    preset === "pinned" || preset === "archived" ? "all" : tagMatch;
 
   // Any filter change resets pagination.
   // biome-ignore lint/correctness/useExhaustiveDependencies: offset is the target, not a trigger
@@ -114,8 +125,10 @@ export function Notes({ preset }: { preset?: NotesPreset } = {}) {
       tagMatch: effectiveTagMatch,
       sort,
       offset,
+      ...(preset === "untagged" ? { hasTags: false } : {}),
+      ...(preset === "orphaned" ? { hasLinks: false } : {}),
     }),
-    [debouncedSearch, debouncedPrefix, effectiveTags, effectiveTagMatch, sort, offset],
+    [debouncedSearch, debouncedPrefix, effectiveTags, effectiveTagMatch, sort, offset, preset],
   );
 
   const notes = useNotes(queryState);
@@ -184,6 +197,7 @@ export function Notes({ preset }: { preset?: NotesPreset } = {}) {
   if (!activeVault) return <Navigate to="/" replace />;
 
   const title = preset ? PRESET_TITLES[preset] : "Notes";
+  const subtitle = preset ? PRESET_SUBTITLES[preset] : null;
   const pageFirst = offset + 1;
   const pageLast = offset + (displayNotes?.length ?? 0);
   const hasPrev = offset > 0;
@@ -196,6 +210,7 @@ export function Notes({ preset }: { preset?: NotesPreset } = {}) {
         <div>
           <p className="text-xs uppercase tracking-wider text-fg-dim">{activeVault.name}</p>
           <h1 className="font-serif text-3xl tracking-tight">{title}</h1>
+          {subtitle ? <p className="mt-1 text-sm text-fg-muted">{subtitle}</p> : null}
         </div>
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
           {!preset ? (
@@ -252,6 +267,7 @@ export function Notes({ preset }: { preset?: NotesPreset } = {}) {
                   onSelect={(p) => setPathPrefix(p)}
                 />
               ) : null}
+              <BuiltInViewsSidebar />
               <SavedViewsSidebar
                 views={savedViews.data}
                 isPending={savedViews.isPending}
@@ -280,18 +296,20 @@ export function Notes({ preset }: { preset?: NotesPreset } = {}) {
                 className="flex-1 min-w-48 rounded-md border border-border bg-card px-3 py-2 font-mono text-sm text-fg focus:border-accent focus:outline-none"
                 aria-label="Filter by path prefix"
               />
-              <TagFilter
-                tags={tags.data ?? []}
-                selected={selectedTags}
-                onToggle={(name) =>
-                  setSelectedTags((cur) =>
-                    cur.includes(name) ? cur.filter((t) => t !== name) : [...cur, name],
-                  )
-                }
-                tagMatch={tagMatch}
-                onTagMatchChange={setTagMatch}
-                onClear={() => setSelectedTags([])}
-              />
+              {preset !== "untagged" ? (
+                <TagFilter
+                  tags={tags.data ?? []}
+                  selected={selectedTags}
+                  onToggle={(name) =>
+                    setSelectedTags((cur) =>
+                      cur.includes(name) ? cur.filter((t) => t !== name) : [...cur, name],
+                    )
+                  }
+                  tagMatch={tagMatch}
+                  onTagMatchChange={setTagMatch}
+                  onClear={() => setSelectedTags([])}
+                />
+              ) : null}
               {!preset && filteringActive ? (
                 <button
                   type="button"
@@ -309,13 +327,17 @@ export function Notes({ preset }: { preset?: NotesPreset } = {}) {
           ) : notes.isError ? (
             <ErrorBlock error={notes.error} />
           ) : displayNotes && displayNotes.length > 0 ? (
-            <ol className="divide-y divide-border rounded-md border border-border bg-card">
+            <ol
+              aria-label="Notes"
+              className="divide-y divide-border rounded-md border border-border bg-card"
+            >
               {displayNotes.map((n) => (
                 <NoteRow
                   key={n.id}
                   note={n}
                   pinnedTag={roles.pinned}
                   archivedTag={roles.archived}
+                  quickTagSuggestions={preset === "untagged" ? (tags.data ?? []) : undefined}
                 />
               ))}
             </ol>
@@ -475,45 +497,208 @@ function NoteRow({
   note,
   pinnedTag,
   archivedTag,
-}: { note: Note; pinnedTag: string; archivedTag: string }) {
+  quickTagSuggestions,
+}: {
+  note: Note;
+  pinnedTag: string;
+  archivedTag: string;
+  quickTagSuggestions?: TagSummary[];
+}) {
   const label = note.path ?? note.id;
   const stamp = note.updatedAt ?? note.createdAt;
   const isPinned = (note.tags ?? []).includes(pinnedTag);
   const isArchived = (note.tags ?? []).includes(archivedTag);
   return (
     <li className={isArchived ? "opacity-60 italic" : undefined}>
-      <Link
-        to={`/notes/${encodeURIComponent(note.id)}`}
-        className="block px-4 py-3 hover:bg-bg/60 focus:bg-bg/60 focus:outline-none"
-      >
-        <div className="flex items-baseline justify-between gap-4">
-          <span className="flex min-w-0 items-baseline gap-1.5">
-            {isPinned ? (
-              <span className="shrink-0 text-accent" aria-label="pinned" title="pinned">
-                ★
-              </span>
-            ) : null}
-            <span className="truncate font-mono text-sm text-fg">{label}</span>
-          </span>
-          <span className="shrink-0 text-xs text-fg-dim">{relativeTime(stamp)}</span>
-        </div>
-        {note.preview ? (
-          <p className="mt-1 truncate text-sm text-fg-muted">{note.preview}</p>
-        ) : null}
-        {note.tags && note.tags.length > 0 ? (
-          <div className="mt-2 flex flex-wrap gap-1.5">
-            {note.tags.map((t) => (
-              <span
-                key={t}
-                className="rounded-full border border-border bg-bg/60 px-2 py-0.5 text-xs text-fg-dim"
-              >
-                {t}
-              </span>
-            ))}
+      <div className="flex items-stretch">
+        <Link
+          to={`/notes/${encodeURIComponent(note.id)}`}
+          className="block flex-1 min-w-0 px-4 py-3 hover:bg-bg/60 focus:bg-bg/60 focus:outline-none"
+        >
+          <div className="flex items-baseline justify-between gap-4">
+            <span className="flex min-w-0 items-baseline gap-1.5">
+              {isPinned ? (
+                <span className="shrink-0 text-accent" aria-label="pinned" title="pinned">
+                  ★
+                </span>
+              ) : null}
+              <span className="truncate font-mono text-sm text-fg">{label}</span>
+            </span>
+            <span className="shrink-0 text-xs text-fg-dim">{relativeTime(stamp)}</span>
+          </div>
+          {note.preview ? (
+            <p className="mt-1 truncate text-sm text-fg-muted">{note.preview}</p>
+          ) : null}
+          {note.tags && note.tags.length > 0 ? (
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {note.tags.map((t) => (
+                <span
+                  key={t}
+                  className="rounded-full border border-border bg-bg/60 px-2 py-0.5 text-xs text-fg-dim"
+                >
+                  {t}
+                </span>
+              ))}
+            </div>
+          ) : null}
+        </Link>
+        {quickTagSuggestions ? (
+          <div className="shrink-0 px-3 py-3">
+            <QuickTagControl
+              noteId={note.id}
+              existing={note.tags ?? []}
+              suggestions={quickTagSuggestions}
+            />
           </div>
         ) : null}
-      </Link>
+      </div>
     </li>
+  );
+}
+
+function QuickTagControl({
+  noteId,
+  existing,
+  suggestions,
+}: {
+  noteId: string;
+  existing: string[];
+  suggestions: TagSummary[];
+}) {
+  const [open, setOpen] = useState(false);
+  const [value, setValue] = useState("");
+  const containerRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const update = useUpdateNote(noteId);
+  const pushToast = useToastStore((s) => s.push);
+
+  // Focus the input when opening; close on outside click or Escape.
+  useEffect(() => {
+    if (!open) return;
+    inputRef.current?.focus();
+    const onClick = (e: MouseEvent) => {
+      if (!containerRef.current?.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", onClick);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onClick);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  const filtered = useMemo(() => {
+    const q = normalizeTag(value).toLowerCase();
+    const have = new Set(existing.map((t) => t.toLowerCase()));
+    const pool = suggestions.filter((t) => !have.has(t.name.toLowerCase()));
+    if (!q) return pool.slice(0, 8);
+    return pool.filter((t) => t.name.toLowerCase().includes(q)).slice(0, 8);
+  }, [value, suggestions, existing]);
+
+  const apply = useCallback(
+    async (raw: string) => {
+      const tag = normalizeTag(raw);
+      if (!tag) return;
+      try {
+        await update.mutateAsync({ tags: { add: [tag] } });
+        pushToast(`Added #${tag}`, "success");
+        setValue("");
+        setOpen(false);
+      } catch (err) {
+        pushToast(`Could not add tag: ${(err as Error).message}`, "error");
+      }
+    },
+    [update, pushToast],
+  );
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="rounded-md border border-border bg-bg/60 px-2 py-1 text-xs text-fg-muted hover:border-accent hover:text-accent"
+        aria-label="Add tag"
+      >
+        + tag
+      </button>
+    );
+  }
+
+  return (
+    <div ref={containerRef} className="relative">
+      <input
+        ref={inputRef}
+        type="text"
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            apply(value);
+          }
+        }}
+        placeholder="tag…"
+        aria-label="Tag name"
+        disabled={update.isPending}
+        className="w-32 rounded-md border border-border bg-card px-2 py-1 text-xs text-fg focus:border-accent focus:outline-none disabled:opacity-50"
+      />
+      {filtered.length > 0 ? (
+        <ul
+          className="absolute right-0 z-20 mt-1 max-h-48 w-44 overflow-y-auto rounded-md border border-border bg-card text-xs shadow-lg"
+          aria-label="Tag suggestions"
+        >
+          {filtered.map((t) => (
+            <li key={t.name}>
+              <button
+                type="button"
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  apply(t.name);
+                }}
+                className="flex w-full items-center justify-between px-2 py-1 text-left text-fg hover:bg-bg/60"
+              >
+                <span className="truncate">{t.name}</span>
+                <span className="ml-2 shrink-0 text-fg-dim">{t.count}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </div>
+  );
+}
+
+function BuiltInViewsSidebar() {
+  const items: Array<{ to: string; label: string; glyph?: string }> = [
+    { to: "/pinned", label: "Pinned", glyph: "★" },
+    { to: "/archived", label: "Archived" },
+    { to: "/untagged", label: "Untagged" },
+    { to: "/orphaned", label: "Orphaned" },
+  ];
+  return (
+    <aside>
+      <h2 className="mb-2 text-xs uppercase tracking-wider text-fg-dim">Views</h2>
+      <ul className="space-y-1">
+        {items.map((it) => (
+          <li key={it.to}>
+            <Link
+              to={it.to}
+              className="flex items-center gap-1.5 truncate rounded-md border border-transparent px-2 py-1 text-sm text-fg-muted hover:border-border hover:bg-card hover:text-accent"
+            >
+              {it.glyph ? (
+                <span className="shrink-0 text-accent" aria-hidden="true">
+                  {it.glyph}
+                </span>
+              ) : null}
+              <span className="truncate">{it.label}</span>
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </aside>
   );
 }
 

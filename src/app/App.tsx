@@ -37,6 +37,8 @@ export function App() {
                 <Route path="/notes" element={<Notes />} />
                 <Route path="/pinned" element={<Notes preset="pinned" />} />
                 <Route path="/archived" element={<Notes preset="archived" />} />
+                <Route path="/untagged" element={<Notes preset="untagged" />} />
+                <Route path="/orphaned" element={<Notes preset="orphaned" />} />
                 <Route path="/tags" element={<Tags />} />
                 <Route path="/new" element={<NoteNew />} />
                 <Route path="/capture" element={<Capture />} />
