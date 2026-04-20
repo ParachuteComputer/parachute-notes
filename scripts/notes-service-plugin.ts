@@ -11,6 +11,8 @@ interface PluginOptions {
   name: string;
   version: string;
   basePath: string;
+  displayName?: string;
+  tagline?: string;
 }
 
 // Notes is an SPA — no long-running Node entrypoint that would otherwise own
@@ -22,7 +24,7 @@ interface PluginOptions {
 // Best-effort: a manifest write failure (PARACHUTE_HOME unwritable, schema
 // drift, malformed pre-existing file) only logs a warning. Don't break dev.
 export function notesServicePlugin(options: PluginOptions): Plugin {
-  const { name, version, basePath } = options;
+  const { name, version, basePath, displayName, tagline } = options;
   const healthPath = basePath.endsWith("/") ? basePath : `${basePath}/`;
 
   function writeEntry(port: number): void {
@@ -32,6 +34,8 @@ export function notesServicePlugin(options: PluginOptions): Plugin {
       paths: [healthPath],
       health: healthPath,
       version,
+      ...(displayName ? { displayName } : {}),
+      ...(tagline ? { tagline } : {}),
     };
     try {
       upsertService(entry);

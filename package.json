@@ -9,11 +9,7 @@
     "type": "git",
     "url": "https://github.com/ParachuteComputer/parachute-notes.git"
   },
-  "files": [
-    "dist",
-    "README.md",
-    "LICENSE"
-  ],
+  "files": ["dist", "README.md", "LICENSE"],
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",

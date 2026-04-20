@@ -22,6 +22,11 @@ export interface ServiceEntry {
   paths: string[];
   health: string;
   version: string;
+  // Optional display metadata consumed by the hub page and service cards.
+  // Kept optional so older writers (vault, scribe) don't break validation
+  // until they catch up.
+  displayName?: string;
+  tagline?: string;
 }
 
 export interface ServicesManifest {
@@ -37,7 +42,7 @@ function validateEntry(raw: unknown, where: string): ServiceEntry {
     throw new ServicesManifestError(`${where}: expected object, got ${typeof raw}`);
   }
   const e = raw as Record<string, unknown>;
-  const { name, port, paths, health, version } = e;
+  const { name, port, paths, health, version, displayName, tagline } = e;
   if (typeof name !== "string" || name.length === 0) {
     throw new ServicesManifestError(`${where}: "name" must be a non-empty string`);
   }
@@ -53,7 +58,16 @@ function validateEntry(raw: unknown, where: string): ServiceEntry {
   if (typeof version !== "string") {
     throw new ServicesManifestError(`${where}: "version" must be a string`);
   }
-  return { name, port, paths: paths as string[], health, version };
+  if (displayName !== undefined && typeof displayName !== "string") {
+    throw new ServicesManifestError(`${where}: "displayName" must be a string when present`);
+  }
+  if (tagline !== undefined && typeof tagline !== "string") {
+    throw new ServicesManifestError(`${where}: "tagline" must be a string when present`);
+  }
+  const out: ServiceEntry = { name, port, paths: paths as string[], health, version };
+  if (typeof displayName === "string") out.displayName = displayName;
+  if (typeof tagline === "string") out.tagline = tagline;
+  return out;
 }
 
 function validateManifest(raw: unknown, where: string): ServicesManifest {
