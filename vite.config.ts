@@ -4,6 +4,7 @@ import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 import { VitePWA } from "vite-plugin-pwa";
+import { buildServiceInfo, infoEndpointPlugin } from "./scripts/info-endpoint-plugin";
 import { notesServicePlugin } from "./scripts/notes-service-plugin";
 import { buildPwaManifest } from "./src/pwa-manifest";
 
@@ -11,13 +12,27 @@ import { buildPwaManifest } from "./src/pwa-manifest";
 // Host header — useful when reaching the dev server over a tailnet. Off by default.
 const devExposure = process.env.VITE_EXPOSE === "true";
 
-// VITE_BASE_PATH lets the CLI's expose tooling serve Notes at a sub-path
-// (e.g. `/notes/`) without code changes. Defaults to `/` for stand-alone use.
-const basePath = normalizeBase(process.env.VITE_BASE_PATH ?? "/");
+// Notes is one of N frontends mounted under a shared root: the CLI hub page
+// owns `/`, and each frontend lives under its own slug. Default to `/notes`
+// here so dev, build, and `parachute start notes` all agree.
+// Override with VITE_BASE_PATH=/ if you want the legacy stand-alone shape.
+const basePath = normalizeBase(process.env.VITE_BASE_PATH ?? "/notes");
+
+const DISPLAY_NAME = "Notes";
+const TAGLINE = "Web client for your Parachute Vault";
 
 const pkg = JSON.parse(readFileSync(path.resolve(__dirname, "./package.json"), "utf8")) as {
   version: string;
 };
+
+const serviceInfo = buildServiceInfo({
+  name: "parachute-notes",
+  displayName: DISPLAY_NAME,
+  tagline: TAGLINE,
+  version: pkg.version,
+  basePath,
+  iconFile: "icon.svg",
+});
 
 function normalizeBase(input: string): string {
   let b = input.startsWith("/") ? input : `/${input}`;
@@ -30,7 +45,14 @@ export default defineConfig({
   plugins: [
     react(),
     tailwindcss(),
-    notesServicePlugin({ name: "parachute-notes", version: pkg.version, basePath }),
+    notesServicePlugin({
+      name: "parachute-notes",
+      version: pkg.version,
+      basePath,
+      displayName: DISPLAY_NAME,
+      tagline: TAGLINE,
+    }),
+    infoEndpointPlugin({ basePath, ...serviceInfo }),
     VitePWA({
       registerType: "prompt",
       includeAssets: ["icon.svg", "apple-touch-icon-180x180.png", "favicon.ico"],

@@ -53,7 +53,7 @@ describe("beginOAuth", () => {
     expect(url.searchParams.get("response_type")).toBe("code");
     expect(url.searchParams.get("client_id")).toBe("client-123");
     expect(url.searchParams.get("code_challenge_method")).toBe("S256");
-    expect(url.searchParams.get("redirect_uri")).toBe("http://localhost:3000/oauth/callback");
+    expect(url.searchParams.get("redirect_uri")).toBe("http://localhost:3000/notes/oauth/callback");
     expect(url.searchParams.get("scope")).toBe("full");
 
     const challenge = url.searchParams.get("code_challenge");

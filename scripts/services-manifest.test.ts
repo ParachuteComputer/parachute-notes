@@ -19,9 +19,11 @@ function tempPath(): { path: string; cleanup: () => void } {
 const notes: ServiceEntry = {
   name: "parachute-notes",
   port: 5173,
-  paths: ["/"],
-  health: "/",
+  paths: ["/notes/"],
+  health: "/notes/",
   version: "0.0.1",
+  displayName: "Notes",
+  tagline: "Web client for your Parachute Vault",
 };
 
 const vault: ServiceEntry = {
@@ -109,6 +111,30 @@ describe("services-manifest", () => {
       const bad = { ...notes, port: -1 };
       expect(() => upsertService(bad as ServiceEntry, path)).toThrow(ServicesManifestError);
       expect(readManifest(path)).toEqual({ services: [vault] });
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("accepts entries without optional displayName and tagline (vault-style)", () => {
+    const { path, cleanup } = tempPath();
+    try {
+      const m = upsertService(vault, path);
+      expect(m.services[0]).toEqual(vault);
+      expect(m.services[0]?.displayName).toBeUndefined();
+      expect(m.services[0]?.tagline).toBeUndefined();
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("rejects non-string displayName / tagline", () => {
+    const { path, cleanup } = tempPath();
+    try {
+      const badDisplay = { ...notes, displayName: 42 } as unknown as ServiceEntry;
+      expect(() => upsertService(badDisplay, path)).toThrow(/displayName/);
+      const badTagline = { ...notes, tagline: 42 } as unknown as ServiceEntry;
+      expect(() => upsertService(badTagline, path)).toThrow(/tagline/);
     } finally {
       cleanup();
     }
