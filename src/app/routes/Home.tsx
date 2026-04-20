@@ -7,6 +7,7 @@ import { Link } from "react-router";
 export function Home() {
   const probe = useOriginVaultProbe();
   const foundOrigin = probe.status === "found" ? probe.origin : null;
+  const probing = probe.status === "probing";
 
   return (
     <div className="mx-auto max-w-2xl px-6 py-20 text-center">
@@ -15,7 +16,12 @@ export function Home() {
       </p>
       <h1 className="mb-4 font-serif text-5xl tracking-tight">Notes</h1>
 
-      {foundOrigin ? (
+      {/* Hold back the CTA while probing so we don't flash "Connect a vault"
+          and then swap it for "Looks like there's a vault at ..." once the
+          probe resolves. Reserve vertical space so the wordmark doesn't jump. */}
+      {probing ? (
+        <div className="h-28" aria-hidden="true" />
+      ) : foundOrigin ? (
         <>
           <p className="mb-8 text-fg tracking-wide">
             Looks like there's a vault at{" "}

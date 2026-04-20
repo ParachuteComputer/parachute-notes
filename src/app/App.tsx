@@ -5,7 +5,7 @@ import { UpdateBanner } from "@/components/UpdateBanner";
 import { useVaultStore } from "@/lib/vault";
 import { QueryProvider } from "@/providers/QueryProvider";
 import { SyncProvider } from "@/providers/SyncProvider";
-import { BrowserRouter, Navigate, Route, Routes } from "react-router";
+import { BrowserRouter, Navigate, Route, Routes, useParams } from "react-router";
 import { Activity } from "./routes/Activity";
 import { AddVault } from "./routes/AddVault";
 import { Calendar } from "./routes/Calendar";
@@ -29,6 +29,17 @@ import { Vaults } from "./routes/Vaults";
 function NotesIndex() {
   const activeVault = useVaultStore((s) => s.getActiveVault());
   return activeVault ? <Notes /> : <Home />;
+}
+
+// Shim for pre-#49 external bookmarks. When Notes lived at the origin root,
+// links were `/notes/<id>` and `/notes/<id>/edit`. After #49 moved Notes
+// under `/notes/`, Tailscale strips that prefix, leaving internal `/<id>`
+// and `/<id>/edit` — which the catch-all would otherwise bounce to `/`.
+// Redirect them to the canonical `/n/<id>` routes so old bookmarks survive.
+function NoteIdRedirect({ suffix = "" }: { suffix?: string }) {
+  const { id } = useParams<{ id: string }>();
+  if (!id) return <Navigate to="/" replace />;
+  return <Navigate to={`/n/${encodeURIComponent(id)}${suffix}`} replace />;
 }
 
 export function App() {
@@ -57,6 +68,8 @@ export function App() {
                 <Route path="/activity" element={<Activity />} />
                 <Route path="/n/:id" element={<NoteView />} />
                 <Route path="/n/:id/edit" element={<NoteEditor />} />
+                <Route path="/:id" element={<NoteIdRedirect />} />
+                <Route path="/:id/edit" element={<NoteIdRedirect suffix="/edit" />} />
                 <Route path="/add" element={<AddVault />} />
                 <Route path="/oauth/callback" element={<OAuthCallback />} />
                 <Route path="/vaults" element={<Vaults />} />

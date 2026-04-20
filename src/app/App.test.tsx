@@ -1,5 +1,5 @@
 import { useVaultStore } from "@/lib/vault/store";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
 
@@ -26,10 +26,15 @@ describe("App", () => {
     vi.restoreAllMocks();
   });
 
-  it("renders the Parachute Notes wordmark and the connect CTA when no vaults exist", () => {
+  it("renders the Parachute Notes wordmark and the connect CTA when no vaults exist", async () => {
     render(<App />);
     expect(screen.getByRole("link", { name: /parachute notes/i })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /connect a vault/i })).toBeInTheDocument();
+    // Home holds back the CTA until the origin probe settles to avoid
+    // flashing "Connect a vault" before swapping to "Looks like there's a
+    // vault at …". Wait for the probe to resolve before asserting the CTA.
+    await waitFor(() => {
+      expect(screen.getByRole("link", { name: /connect a vault/i })).toBeInTheDocument();
+    });
     expect(screen.getByText(/no vault connected/i)).toBeInTheDocument();
   });
 
@@ -61,5 +66,31 @@ describe("App", () => {
     // list). The bug Aaron hit (/notes/notes) would surface here if basename
     // and route paths disagreed.
     expect(window.location.pathname).toMatch(/^\/notes\/?$/);
+  });
+
+  it("static route /settings wins over the dynamic /:id deep-link shim", () => {
+    useVaultStore.setState({
+      vaults: {
+        v1: {
+          id: "v1",
+          url: "http://localhost:1940",
+          name: "default",
+          issuer: "http://localhost:1940",
+          clientId: "c",
+          scope: "full",
+          addedAt: "2026-04-20T00:00:00.000Z",
+          lastUsedAt: "2026-04-20T00:00:00.000Z",
+        },
+      },
+      activeVaultId: "v1",
+    });
+    window.history.replaceState({}, "", "/notes/settings");
+    render(<App />);
+    // Regression guard against future route-table accidents: RR7's ranked
+    // routing must hold `/settings` (and every other named static route)
+    // above the `/:id` pre-#49 bookmark shim. If this ever fails, the shim
+    // would start swallowing real internal pages.
+    expect(screen.getByRole("heading", { level: 1, name: /settings/i })).toBeInTheDocument();
+    expect(window.location.pathname).toBe("/notes/settings");
   });
 });

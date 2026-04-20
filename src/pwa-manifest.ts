@@ -17,6 +17,10 @@ export function buildPwaManifest(base = "/"): Partial<ManifestOptions> {
     orientation: "any",
     start_url: normalized,
     scope: normalized,
+    // Icon `src` values are intentionally bare (no leading `/`). They resolve
+    // relative to the manifest URL, which itself sits under the deployed base
+    // path (e.g. `/notes/manifest.webmanifest`). That keeps the icons portable
+    // across mounts without rewriting each path — don't add a leading slash.
     icons: [
       { src: "pwa-64x64.png", sizes: "64x64", type: "image/png" },
       { src: "pwa-192x192.png", sizes: "192x192", type: "image/png" },
