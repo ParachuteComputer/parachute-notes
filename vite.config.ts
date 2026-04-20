@@ -82,8 +82,16 @@ export default defineConfig({
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  // Notes' canonical Parachute slot is 1942 (vault is 1940; the 1939–1949
+  // range is reserved for first-party services). Pin it so the manifest
+  // write in `notes-service-plugin.ts` advertises a stable port — Vite's
+  // 5173 default would otherwise drift if anything else grabs that port.
   server: {
+    port: 1942,
     host: devExposure ? "0.0.0.0" : undefined,
     allowedHosts: devExposure ? true : undefined,
+  },
+  preview: {
+    port: 1942,
   },
 });

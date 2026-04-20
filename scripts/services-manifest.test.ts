@@ -18,7 +18,7 @@ function tempPath(): { path: string; cleanup: () => void } {
 
 const notes: ServiceEntry = {
   name: "parachute-notes",
-  port: 5173,
+  port: 1942,
   paths: ["/notes/"],
   health: "/notes/",
   version: "0.0.1",
