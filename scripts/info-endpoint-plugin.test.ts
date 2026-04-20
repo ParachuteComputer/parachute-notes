@@ -7,10 +7,11 @@ const exampleInfo: ServiceInfo = {
   tagline: "Web client for your Parachute Vault",
   version: "0.0.1",
   iconUrl: "/notes/icon.svg",
+  kind: "frontend",
 };
 
 describe("buildServiceInfo", () => {
-  it("threads basePath into iconUrl", () => {
+  it("threads basePath into iconUrl and carries kind through", () => {
     const info = buildServiceInfo({
       name: "parachute-notes",
       displayName: "Notes",
@@ -18,8 +19,10 @@ describe("buildServiceInfo", () => {
       version: "0.0.1",
       basePath: "/notes",
       iconFile: "icon.svg",
+      kind: "frontend",
     });
     expect(info.iconUrl).toBe("/notes/icon.svg");
+    expect(info.kind).toBe("frontend");
   });
 
   it("normalizes a trailing slash and strips a leading icon slash", () => {
@@ -30,8 +33,22 @@ describe("buildServiceInfo", () => {
       version: "1",
       basePath: "/notes/",
       iconFile: "/icon.svg",
+      kind: "frontend",
     });
     expect(info.iconUrl).toBe("/notes/icon.svg");
+  });
+
+  it("accepts alternate kinds for non-frontend services", () => {
+    const api = buildServiceInfo({
+      name: "parachute-vault",
+      displayName: "Vault",
+      tagline: "Memory",
+      version: "1",
+      basePath: "/vault/default",
+      iconFile: "icon.svg",
+      kind: "api",
+    });
+    expect(api.kind).toBe("api");
   });
 });
 

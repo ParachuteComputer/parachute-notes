@@ -1,8 +1,9 @@
-import type { PendingOAuthState, StoredToken, VaultRecord } from "./types";
+import type { PendingOAuthState, ServicesCatalog, StoredToken, VaultRecord } from "./types";
 
 const VAULTS_KEY = "lens:vaults";
 const ACTIVE_KEY = "lens:active_vault";
 const TOKEN_PREFIX = "lens:token:";
+const SERVICES_PREFIX = "lens:services:";
 const PENDING_OAUTH_KEY = "lens:oauth:pending";
 
 function read<T>(storage: Storage, key: string): T | null {
@@ -59,6 +60,22 @@ export function saveToken(vaultId: string, token: StoredToken): void {
 export function deleteToken(vaultId: string): void {
   try {
     localStorage.removeItem(TOKEN_PREFIX + vaultId);
+  } catch {
+    // storage unavailable — best-effort only
+  }
+}
+
+export function loadServicesCatalog(vaultId: string): ServicesCatalog | null {
+  return read<ServicesCatalog>(localStorage, SERVICES_PREFIX + vaultId);
+}
+
+export function saveServicesCatalog(vaultId: string, catalog: ServicesCatalog): void {
+  write(localStorage, SERVICES_PREFIX + vaultId, catalog);
+}
+
+export function deleteServicesCatalog(vaultId: string): void {
+  try {
+    localStorage.removeItem(SERVICES_PREFIX + vaultId);
   } catch {
     // storage unavailable — best-effort only
   }
