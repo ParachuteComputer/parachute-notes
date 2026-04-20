@@ -42,8 +42,34 @@ function routedFetch(routes: Record<string, MockResponse | "network-error">) {
 }
 
 describe("probeVaultAtOrigin", () => {
-  it("discovers via parachute.json and returns the chosen vault URL", async () => {
+  it("resolves at the hub origin directly via OAuth metadata (Phase 0)", async () => {
+    // Hub origin advertises itself as issuer; the parachute.json registry
+    // isn't needed at all. Direct OAuth discovery wins without any registry
+    // fetch being required.
+    const hubMetadata = { ...validMetadata, issuer: "https://hub.example" };
     const fetchImpl = routedFetch({
+      "/.well-known/oauth-authorization-server": { json: hubMetadata },
+    });
+    const result = await probeVaultAtOrigin("https://hub.example", 500, fetchImpl);
+    expect(result).toBe("https://hub.example");
+  });
+
+  it("resolves a directly-pasted vault URL via OAuth metadata", async () => {
+    // Standalone vault case: user pastes the full vault URL. Direct probe
+    // (first) succeeds; no registry consulted.
+    const fetchImpl = routedFetch({
+      "/vault/default/.well-known/oauth-authorization-server": { json: validMetadata },
+    });
+    const result = await probeVaultAtOrigin("https://h.example/vault/default", 500, fetchImpl);
+    expect(result).toBe("https://h.example/vault/default");
+  });
+
+  it("falls back to parachute.json when direct OAuth discovery fails", async () => {
+    // User pasted a bare origin that doesn't serve OAuth metadata itself but
+    // does publish a registry pointing at a real vault URL.
+    const fetchImpl = routedFetch({
+      // Direct probe on the origin fails.
+      "https://h.example/.well-known/oauth-authorization-server": { ok: false, status: 404 },
       "/.well-known/parachute.json": {
         json: { vault: { url: "https://h.example/vault/default" } },
       },
@@ -53,8 +79,9 @@ describe("probeVaultAtOrigin", () => {
     expect(result).toBe("https://h.example/vault/default");
   });
 
-  it("prefers the entry named `default` from a multi-vault parachute.json", async () => {
+  it("prefers the entry named `default` from a multi-vault parachute.json fallback", async () => {
     const fetchImpl = routedFetch({
+      "https://h.example/.well-known/oauth-authorization-server": { ok: false, status: 404 },
       "/.well-known/parachute.json": {
         json: {
           vaults: [
@@ -69,40 +96,31 @@ describe("probeVaultAtOrigin", () => {
     expect(result).toBe("https://h.example/vault/default");
   });
 
-  it("falls back to direct OAuth metadata probing when parachute.json is missing", async () => {
-    // User pasted a full vault URL directly; no parachute.json on origin.
+  it("returns null when neither direct OAuth nor parachute.json resolve", async () => {
     const fetchImpl = routedFetch({
-      "/.well-known/parachute.json": { ok: false, status: 404 },
-      "/vault/default/.well-known/oauth-authorization-server": { json: validMetadata },
-    });
-    const result = await probeVaultAtOrigin("https://h.example/vault/default", 500, fetchImpl);
-    expect(result).toBe("https://h.example/vault/default");
-  });
-
-  it("returns null when neither parachute.json nor direct OAuth metadata resolve", async () => {
-    const fetchImpl = routedFetch({
-      "/.well-known/parachute.json": { ok: false, status: 404 },
       "/.well-known/oauth-authorization-server": { ok: false, status: 404 },
+      "/.well-known/parachute.json": { ok: false, status: 404 },
     });
     expect(await probeVaultAtOrigin("https://h.example", 500, fetchImpl)).toBeNull();
   });
 
-  it("returns null on network error during direct probe", async () => {
+  it("returns null on network error during direct probe with no registry", async () => {
     const fetchImpl = routedFetch({
-      "/.well-known/parachute.json": { ok: false, status: 404 },
       "/.well-known/oauth-authorization-server": "network-error",
+      "/.well-known/parachute.json": { ok: false, status: 404 },
     });
     expect(await probeVaultAtOrigin("https://h.example", 500, fetchImpl)).toBeNull();
   });
 
   it("returns null when parachute.json is found but its vault fails OAuth metadata", async () => {
     const fetchImpl = routedFetch({
+      // Direct probe on the origin fails, and the registry-pointed vault
+      // also fails OAuth metadata.
+      "https://h.example/.well-known/oauth-authorization-server": { ok: false, status: 404 },
       "/.well-known/parachute.json": {
         json: { vault: { url: "https://h.example/vault/broken" } },
       },
-      // Both the parachute.json-pointed and direct probes fail.
       "/vault/broken/.well-known/oauth-authorization-server": { ok: false, status: 500 },
-      "/.well-known/oauth-authorization-server": { ok: false, status: 404 },
     });
     expect(await probeVaultAtOrigin("https://h.example", 500, fetchImpl)).toBeNull();
   });

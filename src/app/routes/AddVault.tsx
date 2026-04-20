@@ -75,8 +75,9 @@ export function AddVault() {
             className="w-full rounded-md border border-border bg-card px-3 py-2 font-mono text-sm text-fg focus:border-accent focus:outline-none"
           />
           <p className="mt-1.5 text-xs text-fg-dim">
-            Include the vault path (e.g. <code>/vault/default</code>). If the host serves a{" "}
-            <code>parachute.json</code> registry, just paste the origin and we'll discover it.
+            The Parachute hub URL works too — we'll read the vault URL from the token response.
+            Otherwise paste a vault directly (e.g. <code>https://host/vault/default</code>) or a
+            host that serves a <code>parachute.json</code> registry.
           </p>
         </div>
 

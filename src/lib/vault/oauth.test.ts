@@ -168,4 +168,28 @@ describe("completeOAuth", () => {
     );
     expect(loadPendingOAuth()).toBeNull();
   });
+
+  it("returns the non-standard services catalog when the hub embeds it (Phase 1)", async () => {
+    // Hub-issued token responses carry a `services` object so clients can
+    // skip asking for the vault URL. Vault-issued tokens omit it — that
+    // back-compat is exercised by the "exchanges the code…" test above.
+    savePendingOAuth(pending);
+    const fetchImpl = mockFetch([
+      {
+        json: {
+          access_token: "pvt_abc",
+          token_type: "bearer",
+          scope: "full",
+          vault: "default",
+          services: {
+            vault: { url: "https://parachute.x.ts.net/vault/default", version: "0.3.0" },
+            scribe: { url: "https://parachute.x.ts.net/scribe", version: "0.2.0" },
+          },
+        },
+      },
+    ]);
+    const { token } = await completeOAuth("auth-code", "state-xyz", fetchImpl);
+    expect(token.services?.vault?.url).toBe("https://parachute.x.ts.net/vault/default");
+    expect(token.services?.scribe?.url).toBe("https://parachute.x.ts.net/scribe");
+  });
 });

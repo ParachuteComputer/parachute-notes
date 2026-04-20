@@ -35,11 +35,27 @@ export interface ClientRegistration {
   redirect_uris: string[];
 }
 
+// Non-standard `services` extension per hub-as-portal Phase 1: the hub, when
+// it issues a token, tells the client where every ecosystem service lives so
+// the client never has to ask the user for URLs. Vault-issued tokens omit it
+// (standalone deployments); clients must tolerate its absence.
+export interface ServiceCatalogEntry {
+  url: string;
+  version?: string;
+}
+
+export interface ServicesCatalog {
+  vault?: ServiceCatalogEntry;
+  scribe?: ServiceCatalogEntry;
+  [key: string]: ServiceCatalogEntry | undefined;
+}
+
 export interface TokenResponse {
   access_token: string;
   token_type: "bearer";
   scope: TokenScope;
   vault: string;
+  services?: ServicesCatalog;
 }
 
 export interface VaultInfo {

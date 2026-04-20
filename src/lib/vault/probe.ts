@@ -14,22 +14,28 @@ export interface ProbeResult {
 
 const DEFAULT_TIMEOUT_MS = 2500;
 
-// Probe an origin for a Parachute Vault. Two paths:
+// Probe an input URL for a Parachute OAuth issuer. Two paths, in this order:
 //
-//   1. Ecosystem discovery: fetch `${origin}/.well-known/parachute.json` and
-//      pick a vault entry (name=default, else first). Validate by hitting its
-//      OAuth metadata.
-//   2. Direct: probe `${input}/.well-known/oauth-authorization-server` — for
-//      when the user pasted a vault URL directly (e.g. `https://h/vault/work`)
-//      without a parachute.json registry on the origin.
+//   1. Direct OAuth discovery: `${input}/.well-known/oauth-authorization-server`.
+//      Matches the hub-as-portal Phase 0 seam (hub advertises its own origin
+//      as issuer; vault's OAuth is proxied behind it) *and* the standalone
+//      vault case where the user pastes a full vault URL. We try this first
+//      because the hub origin usually doesn't serve a parachute.json.
+//   2. Ecosystem registry fallback: `${origin}/.well-known/parachute.json` →
+//      pick a vault entry (name=default, else first) → validate by hitting
+//      its OAuth metadata. Useful when the user pastes a bare host that only
+//      publishes the registry.
 //
-// Returns the discovered vault URL (full path including `/vault/<name>`) or
-// null if neither path resolves.
+// Returns the URL that successfully resolves OAuth metadata (either the input
+// itself or the registry-pointed vault URL), or null if neither path resolves.
 export async function probeVaultAtOrigin(
   origin: string,
   timeoutMs: number = DEFAULT_TIMEOUT_MS,
   fetchImpl: typeof fetch = fetch.bind(globalThis),
 ): Promise<string | null> {
+  const direct = await tryDiscoverAuthServer(origin, timeoutMs, fetchImpl);
+  if (direct) return direct;
+
   const manifest = await fetchParachuteJson(origin, timeoutMs, fetchImpl);
   if (manifest) {
     const chosen = pickVault(manifest);
@@ -39,7 +45,7 @@ export async function probeVaultAtOrigin(
     }
   }
 
-  return tryDiscoverAuthServer(origin, timeoutMs, fetchImpl);
+  return null;
 }
 
 async function tryDiscoverAuthServer(

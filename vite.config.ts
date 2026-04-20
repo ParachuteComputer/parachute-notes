@@ -32,6 +32,9 @@ const serviceInfo = buildServiceInfo({
   version: pkg.version,
   basePath,
   iconFile: "icon.svg",
+  // Notes has a real UI — the hub should render it as a clickable card that
+  // navigates into `/notes/`, not a detail panel.
+  kind: "frontend",
 });
 
 function normalizeBase(input: string): string {

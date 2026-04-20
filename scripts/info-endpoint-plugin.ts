@@ -1,11 +1,18 @@
 import type { Plugin, PreviewServer, ViteDevServer } from "vite";
 
+// `kind` tells the hub how to present the card: `frontend` is clickable
+// (opens the UI), `api` shows an inline detail panel (click-through is a raw
+// JSON response, not useful for humans), `tool` is a CLI-only or headless
+// service. See DESIGN-2026-04-20-hub-as-portal-oauth-and-service-catalog.md.
+export type ServiceKind = "frontend" | "api" | "tool";
+
 export interface ServiceInfo {
   name: string;
   displayName: string;
   tagline: string;
   version: string;
   iconUrl: string;
+  kind: ServiceKind;
 }
 
 interface PluginOptions extends ServiceInfo {
@@ -54,6 +61,7 @@ export function buildServiceInfo(args: {
   version: string;
   basePath: string;
   iconFile: string;
+  kind: ServiceKind;
 }): ServiceInfo {
   const baseWithSlash = args.basePath.endsWith("/") ? args.basePath : `${args.basePath}/`;
   const icon = args.iconFile.startsWith("/") ? args.iconFile.slice(1) : args.iconFile;
@@ -63,5 +71,6 @@ export function buildServiceInfo(args: {
     tagline: args.tagline,
     version: args.version,
     iconUrl: `${baseWithSlash}${icon}`,
+    kind: args.kind,
   };
 }

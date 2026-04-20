@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import {
+  deleteServicesCatalog,
   deleteToken,
   loadActiveVaultId,
   loadToken,
@@ -47,6 +48,7 @@ export const useVaultStore = create<VaultStoreState>((set, get) => ({
     const { [id]: _removed, ...rest } = get().vaults;
     saveVaults(rest);
     deleteToken(id);
+    deleteServicesCatalog(id);
     const nextActive =
       get().activeVaultId === id ? (Object.keys(rest)[0] ?? null) : get().activeVaultId;
     saveActiveVaultId(nextActive);
