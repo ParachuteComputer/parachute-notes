@@ -237,8 +237,8 @@ function PathTreeSection({ vaultId }: { vaultId: string }) {
       <div>
         <h2 className="font-serif text-xl text-fg">Folder tree (Notes sidebar)</h2>
         <p className="mt-1 text-xs text-fg-dim">
-          Controls the collapsible folder tree on the /notes page. Auto-detect renders the tree when
-          the vault has at least five top-level folders or twenty notes in folders.
+          Controls the collapsible folder tree on the notes list page. Auto-detect renders the tree
+          when the vault has at least five top-level folders or twenty notes in folders.
         </p>
       </div>
       <fieldset className="space-y-2">
@@ -283,7 +283,7 @@ const ROLE_LABELS: Record<TagRoleKey, { title: string; help: string }> = {
   },
   view: {
     title: "Saved view",
-    help: "Tag the /notes saved-view notes carry. Used to list them.",
+    help: "Tag the saved-view notes carry. Used to list them in the notes sidebar.",
   },
 };
 

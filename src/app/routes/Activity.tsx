@@ -81,7 +81,7 @@ function Section({ title, events }: { title: string; events: ActivityEvent[] }) 
         {events.map((ev) => (
           <li key={ev.id}>
             <Link
-              to={`/notes/${encodeURIComponent(ev.noteId)}`}
+              to={`/n/${encodeURIComponent(ev.noteId)}`}
               className="block px-4 py-3 hover:bg-bg/60 focus:bg-bg/60 focus:outline-none"
             >
               <div className="flex items-baseline justify-between gap-4">

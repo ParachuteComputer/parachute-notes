@@ -40,7 +40,6 @@ function renderHome() {
     <MemoryRouter initialEntries={["/"]}>
       <Routes>
         <Route path="/" element={<Home />} />
-        <Route path="/notes" element={<div>Notes</div>} />
         <Route path="/add" element={<div>Add form</div>} />
       </Routes>
     </MemoryRouter>,
@@ -124,8 +123,9 @@ describe("Home landing probe", () => {
       activeVaultId: "existing",
     });
     renderHome();
-    // Active vault redirects to /notes.
-    await waitFor(() => expect(screen.getByText("Notes")).toBeInTheDocument());
-    expect(fetchImpl).not.toHaveBeenCalled();
+    // Home no longer redirects — App.tsx's NotesIndex dispatches to Notes
+    // when a vault is active and mounts Home only when none is. Home's job
+    // here is just: don't probe if there's already a vault.
+    await waitFor(() => expect(fetchImpl).not.toHaveBeenCalled());
   });
 });

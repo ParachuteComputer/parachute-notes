@@ -108,7 +108,7 @@ function renderAt(path: string) {
     <MemoryRouter initialEntries={[path]}>
       <Routes>
         <Route path="/capture" element={<MemoCapture />} />
-        <Route path="/notes" element={<div>NotesListPage</div>} />
+        <Route path="/" element={<div>NotesListPage</div>} />
       </Routes>
     </MemoryRouter>,
     { wrapper: Wrapper },
@@ -206,7 +206,7 @@ describe("MemoCapture route", () => {
       fireEvent.click(screen.getByRole("button", { name: /save memo/i }));
     });
 
-    // Lands on /notes with a toast and three queue rows.
+    // Lands on / with a toast and three queue rows.
     await waitFor(() => {
       expect(screen.getByText("NotesListPage")).toBeInTheDocument();
     });

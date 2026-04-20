@@ -89,7 +89,7 @@ export function NoteNew() {
           }
         }
         pushToast(`Created ${created.path ?? created.id}`, "success");
-        navigate(`/notes/${encodeURIComponent(created.id)}`);
+        navigate(`/n/${encodeURIComponent(created.id)}`);
       },
       onError: (err) => {
         if (err instanceof VaultAuthError) {
@@ -109,7 +109,7 @@ export function NoteNew() {
 
   const handleCancel = useCallback(() => {
     if (isDirty && !confirm("Discard this draft?")) return;
-    navigate("/notes");
+    navigate("/");
   }, [isDirty, navigate]);
 
   useEffect(() => {
@@ -140,7 +140,7 @@ export function NoteNew() {
   return (
     <div className="mx-auto max-w-6xl px-6 py-8">
       <nav className="mb-4 text-sm text-fg-dim">
-        <Link to="/notes" className="hover:text-accent">
+        <Link to="/" className="hover:text-accent">
           ← All notes
         </Link>
       </nav>

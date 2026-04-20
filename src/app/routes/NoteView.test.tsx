@@ -69,8 +69,8 @@ function renderAt(path: string) {
   return render(
     <MemoryRouter initialEntries={[path]}>
       <Routes>
-        <Route path="/notes/:id" element={<NoteView />} />
-        <Route path="/notes" element={<div>NotesListPage</div>} />
+        <Route path="/n/:id" element={<NoteView />} />
+        <Route path="/" element={<div>NotesListPage</div>} />
         <Route path="/add" element={<div>AddVaultPage</div>} />
         <Route path="*" element={<div>Other</div>} />
       </Routes>
@@ -108,24 +108,21 @@ describe("NoteView route", () => {
       },
     });
 
-    renderAt("/notes/abc-123");
+    renderAt("/n/abc-123");
 
     expect(await screen.findByText("Aaron Gabriel")).toBeInTheDocument();
     expect(screen.getByText("Teacher and builder.")).toBeInTheDocument();
     expect(screen.getByText("Canon note on Aaron.")).toBeInTheDocument();
     // Tag chip links to the filtered list
     const tagChip = screen.getByRole("link", { name: "canon" });
-    expect(tagChip).toHaveAttribute("href", "/notes?tag=canon");
-    // Back link to /notes is present
+    expect(tagChip).toHaveAttribute("href", "/?tag=canon");
+    // Back link to / is present
     expect(screen.getByRole("link", { name: /all notes/i })).toBeInTheDocument();
     // Edit placeholder routes to the edit route (PR #5)
-    expect(screen.getByRole("link", { name: /edit/i })).toHaveAttribute(
-      "href",
-      "/notes/abc-123/edit",
-    );
+    expect(screen.getByRole("link", { name: /edit/i })).toHaveAttribute("href", "/n/abc-123/edit");
   });
 
-  it("resolves [[wikilinks]] via the outbound links table and renders as a /notes/<id> link", async () => {
+  it("resolves [[wikilinks]] via the outbound links table and renders as a /n/<id> link", async () => {
     installFetch({
       "/api/notes": {
         body: {
@@ -147,7 +144,7 @@ describe("NoteView route", () => {
       },
     });
 
-    const { container } = renderAt("/notes/me");
+    const { container } = renderAt("/n/me");
 
     // Prefer the in-body wikilink (not the sidebar) via container scoping.
     await screen.findByText(/See/);
@@ -157,14 +154,14 @@ describe("NoteView route", () => {
       body!.querySelectorAll<HTMLAnchorElement>("a.wikilink-resolved"),
     );
     expect(resolvedLinks).toHaveLength(1);
-    expect(resolvedLinks[0]).toHaveAttribute("href", "/notes/uni-id");
+    expect(resolvedLinks[0]).toHaveAttribute("href", "/n/uni-id");
     expect(resolvedLinks[0]?.textContent).toBe("Canon/Uni");
 
     const unresolvedLinks = Array.from(
       body!.querySelectorAll<HTMLAnchorElement>("a.wikilink-unresolved"),
     );
     expect(unresolvedLinks).toHaveLength(1);
-    expect(unresolvedLinks[0]).toHaveAttribute("href", "/notes/Missing%2FNote");
+    expect(unresolvedLinks[0]).toHaveAttribute("href", "/n/Missing%2FNote");
     expect(unresolvedLinks[0]?.textContent).toBe("Missing/Note");
   });
 
@@ -196,18 +193,12 @@ describe("NoteView route", () => {
       },
     });
 
-    renderAt("/notes/center");
+    renderAt("/n/center");
 
     expect(await screen.findByRole("heading", { name: /Outbound \(1\)/ })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /Inbound \(1\)/ })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /Outbound\/One/ })).toHaveAttribute(
-      "href",
-      "/notes/out-1",
-    );
-    expect(screen.getByRole("link", { name: /Inbound\/One/ })).toHaveAttribute(
-      "href",
-      "/notes/in-1",
-    );
+    expect(screen.getByRole("link", { name: /Outbound\/One/ })).toHaveAttribute("href", "/n/out-1");
+    expect(screen.getByRole("link", { name: /Inbound\/One/ })).toHaveAttribute("href", "/n/in-1");
   });
 
   it("renders an inline image attachment (blob-fetched through VaultClient)", async () => {
@@ -237,7 +228,7 @@ describe("NoteView route", () => {
     URL.createObjectURL = vi.fn(() => "blob:fake-url");
     URL.revokeObjectURL = vi.fn();
 
-    renderAt("/notes/with-img");
+    renderAt("/n/with-img");
 
     const img = (await screen.findByAltText("hero.png")) as HTMLImageElement;
     await waitFor(() => {
@@ -250,7 +241,7 @@ describe("NoteView route", () => {
     installFetch({
       "/api/notes": { body: [] },
     });
-    renderAt("/notes/nonexistent");
+    renderAt("/n/nonexistent");
     expect(await screen.findByText(/note not found/i)).toBeInTheDocument();
   });
 
@@ -258,7 +249,7 @@ describe("NoteView route", () => {
     installFetch({
       "/api/notes": { status: 401, body: null },
     });
-    renderAt("/notes/any");
+    renderAt("/n/any");
     expect(await screen.findByText(/session expired/i)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /reconnect/i })).toHaveAttribute("href", "/add");
   });
@@ -278,7 +269,7 @@ describe("NoteView route", () => {
         },
       },
     });
-    renderAt("/notes/abc-123");
+    renderAt("/n/abc-123");
 
     const pinBtn = await screen.findByRole("button", { name: /^☆ Pin$/ });
     fireEvent.click(pinBtn);
@@ -308,7 +299,7 @@ describe("NoteView route", () => {
         },
       },
     });
-    renderAt("/notes/n");
+    renderAt("/n/n");
 
     expect(await screen.findByRole("button", { name: /★ Pinned/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /^Archived$/ })).toBeInTheDocument();
@@ -328,7 +319,7 @@ describe("NoteView route", () => {
         },
       },
     });
-    renderAt("/notes/k");
+    renderAt("/n/k");
 
     await screen.findByRole("button", { name: /^☆ Pin$/ });
     fireEvent.keyDown(window, { key: "p" });

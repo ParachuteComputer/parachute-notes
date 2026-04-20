@@ -64,9 +64,9 @@ export function QuickSwitch({ onClose }: Props) {
   const runEntry = useCallback(
     (entry: QuickSwitchEntry) => {
       if (entry.kind === "note") {
-        navigate(`/notes/${encodeURIComponent(entry.id)}`);
+        navigate(`/n/${encodeURIComponent(entry.id)}`);
       } else if (entry.kind === "tag") {
-        navigate(`/notes?tag=${encodeURIComponent(entry.name)}`);
+        navigate(`/?tag=${encodeURIComponent(entry.name)}`);
       } else {
         navigate(entry.action.to);
       }

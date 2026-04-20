@@ -1,14 +1,11 @@
-import { useOriginVaultProbe, useVaultStore } from "@/lib/vault";
-import { Link, Navigate } from "react-router";
+import { useOriginVaultProbe } from "@/lib/vault";
+import { Link } from "react-router";
 
+// No-vault landing. Mounted at `/` only when no vault is connected (the
+// dispatch lives in `App.tsx`'s `NotesIndex`), so this component never has
+// to redirect anywhere and never has to think about a connected vault.
 export function Home() {
-  const activeVault = useVaultStore((s) => s.getActiveVault());
   const probe = useOriginVaultProbe();
-
-  if (activeVault) {
-    return <Navigate to="/notes" replace />;
-  }
-
   const foundOrigin = probe.status === "found" ? probe.origin : null;
 
   return (

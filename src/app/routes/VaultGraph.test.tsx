@@ -79,7 +79,7 @@ function Wrap({ children }: { children: React.ReactNode }) {
       <QueryClientProvider client={qc}>
         <Routes>
           <Route path="/graph" element={children} />
-          <Route path="/notes/:id" element={<div data-testid="note-route" />} />
+          <Route path="/n/:id" element={<div data-testid="note-route" />} />
           <Route path="/new" element={<div data-testid="new-route" />} />
         </Routes>
       </QueryClientProvider>

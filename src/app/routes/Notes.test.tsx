@@ -78,7 +78,7 @@ describe("Notes route", () => {
     seedStore();
     // BrowserRouter reads from window.history, which persists across tests.
     // Reset so URL-driven filter state doesn't leak between cases.
-    window.history.replaceState({}, "", "/notes");
+    window.history.replaceState({}, "", "/");
   });
 
   afterEach(() => {
@@ -174,7 +174,7 @@ describe("Notes route", () => {
     expect(await screen.findByText(/no notes match these filters/i)).toBeInTheDocument();
   });
 
-  it("pinned-first stable sort on default /notes", async () => {
+  it("pinned-first stable sort on default list view", async () => {
     installFetch({
       notes: [
         {

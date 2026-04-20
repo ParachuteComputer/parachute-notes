@@ -172,8 +172,8 @@ function renderAt(path: string) {
     <MemoryRouter initialEntries={[path]}>
       <Routes>
         <Route path="/new" element={<NoteNew />} />
-        <Route path="/notes/:id" element={<div>NoteViewPage</div>} />
-        <Route path="/notes" element={<div>NotesListPage</div>} />
+        <Route path="/n/:id" element={<div>NoteViewPage</div>} />
+        <Route path="/" element={<div>NotesListPage</div>} />
       </Routes>
     </MemoryRouter>,
     { wrapper: Wrapper },
@@ -210,7 +210,7 @@ describe("NoteNew route", () => {
     expect(create).not.toBeDisabled();
   });
 
-  it("happy path: POSTs payload and navigates to /notes/<new-id>", async () => {
+  it("happy path: POSTs payload and navigates to /n/<new-id>", async () => {
     const fetchImpl = installFetch({
       "POST /api/notes": {
         status: 201,

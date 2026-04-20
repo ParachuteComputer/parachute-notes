@@ -26,7 +26,7 @@ export function NoteView() {
   return (
     <div className="mx-auto max-w-6xl px-6 py-10">
       <nav className="mb-6 text-sm text-fg-dim">
-        <Link to="/notes" className="hover:text-accent">
+        <Link to="/" className="hover:text-accent">
           ← All notes
         </Link>
       </nav>
@@ -79,7 +79,7 @@ function NoteBody({ note }: { note: Note }) {
           {summary ? <p className="mt-3 text-fg-muted">{summary}</p> : null}
           <div className="mt-4 flex flex-wrap items-center gap-2">
             <Link
-              to={`/notes/${encodeURIComponent(note.id)}/edit`}
+              to={`/n/${encodeURIComponent(note.id)}/edit`}
               className="rounded-md border border-border bg-card px-3 py-1.5 text-sm text-fg-muted hover:text-accent"
             >
               Edit
@@ -173,7 +173,7 @@ function TagsPanel({ tags }: { tags: string[] }) {
         {tags.map((t) => (
           <Link
             key={t}
-            to={`/notes?tag=${encodeURIComponent(t)}`}
+            to={`/?tag=${encodeURIComponent(t)}`}
             className="rounded-full border border-border bg-bg/60 px-2 py-0.5 text-xs text-fg-dim hover:text-accent"
           >
             {t}
@@ -208,7 +208,7 @@ function LinksPanel({
           return (
             <li key={`${l.sourceId}->${l.targetId}:${l.relationship}`}>
               <Link
-                to={`/notes/${encodeURIComponent(peerNote.id)}`}
+                to={`/n/${encodeURIComponent(peerNote.id)}`}
                 className="block rounded px-1 py-0.5 hover:bg-bg/50"
               >
                 <div className="truncate font-mono text-xs text-fg-muted hover:text-accent">
@@ -384,7 +384,7 @@ function NotFoundBlock({ id }: { id: string }) {
       <p className="mb-4 text-sm text-fg-muted">
         No note with id <span className="font-mono">{id}</span> in this vault.
       </p>
-      <Link to="/notes" className="text-sm text-accent hover:underline">
+      <Link to="/" className="text-sm text-accent hover:underline">
         Back to all notes
       </Link>
     </div>

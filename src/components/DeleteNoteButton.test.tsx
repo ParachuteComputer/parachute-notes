@@ -75,10 +75,10 @@ const note: Note = {
 
 function renderButton() {
   return render(
-    <MemoryRouter initialEntries={["/notes/note-abc"]}>
+    <MemoryRouter initialEntries={["/n/note-abc"]}>
       <Routes>
-        <Route path="/notes/note-abc" element={<DeleteNoteButton note={note} />} />
-        <Route path="/notes" element={<div>NotesListPage</div>} />
+        <Route path="/n/note-abc" element={<DeleteNoteButton note={note} />} />
+        <Route path="/" element={<div>NotesListPage</div>} />
       </Routes>
     </MemoryRouter>,
     { wrapper: Wrapper },
@@ -137,7 +137,7 @@ describe("DeleteNoteButton", () => {
     expect(confirm).not.toBeDisabled();
   });
 
-  it("happy path: fires DELETE, navigates to /notes, pushes a success toast", async () => {
+  it("happy path: fires DELETE, navigates to /, pushes a success toast", async () => {
     const fetchImpl = installFetch({
       "DELETE /api/notes/": { body: { deleted: true, id: "note-abc" } },
     });

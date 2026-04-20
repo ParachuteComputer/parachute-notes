@@ -78,8 +78,8 @@ export function pathForName(name: string): string {
   return `${VIEWS_PATH_PREFIX}${safe}`;
 }
 
-// Encode the current filter state as URL search params for the /notes
-// route. Same shape as buildNoteQueryParams except we also pass the
+// Encode the current filter state as URL search params for the notes
+// list route. Same shape as buildNoteQueryParams except we also pass the
 // non-server params (tagMatch always — even single tag — so applying a
 // view round-trips exactly; show_archived; sort).
 export function filtersToSearchParams(filters: SavedViewFilters): URLSearchParams {
@@ -93,7 +93,7 @@ export function filtersToSearchParams(filters: SavedViewFilters): URLSearchParam
   return params;
 }
 
-// Inverse: read URL search params (from /notes?...) into a filter spec so
+// Inverse: read URL search params (from /?...) into a filter spec so
 // the route can hydrate its local state from the URL on mount.
 export function searchParamsToFilters(params: URLSearchParams): SavedViewFilters {
   const tags = params.getAll("tag");

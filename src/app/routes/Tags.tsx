@@ -183,7 +183,7 @@ function TagRow({
         className="accent-accent"
       />
       <Link
-        to={`/notes?tag=${encodeURIComponent(tag.name)}`}
+        to={`/?tag=${encodeURIComponent(tag.name)}`}
         className="flex flex-1 items-baseline gap-2 text-fg hover:text-accent focus-visible:outline-2 focus-visible:outline-accent"
       >
         <span className="font-mono">#{tag.name}</span>

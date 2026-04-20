@@ -77,7 +77,7 @@ export const COMMANDS: Array<{
     label: "Notes",
     description: "All notes list",
     keywords: ["notes", "all"],
-    action: { type: "navigate", to: "/notes" },
+    action: { type: "navigate", to: "/" },
   },
   {
     id: "pinned",

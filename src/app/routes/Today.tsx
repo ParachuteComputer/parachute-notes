@@ -134,7 +134,7 @@ function Section({ title, notes }: { title: string; notes: Note[] }) {
         {notes.map((n) => (
           <li key={n.id}>
             <Link
-              to={`/notes/${encodeURIComponent(n.id)}`}
+              to={`/n/${encodeURIComponent(n.id)}`}
               className="block px-4 py-3 hover:bg-bg/60 focus:bg-bg/60 focus:outline-none"
             >
               <div className="flex items-baseline justify-between gap-4">

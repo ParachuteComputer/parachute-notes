@@ -412,7 +412,7 @@ function SavedViewsSidebar({
           {views.map((v) => (
             <li key={v.id}>
               <Link
-                to={`/notes?${filtersToSearchParams(v.filters).toString()}`}
+                to={`/?${filtersToSearchParams(v.filters).toString()}`}
                 className="block truncate rounded-md border border-transparent px-2 py-1 text-sm text-fg-muted hover:border-border hover:bg-card hover:text-accent"
               >
                 {v.name}
@@ -512,7 +512,7 @@ function NoteRow({
     <li className={isArchived ? "opacity-60 italic" : undefined}>
       <div className="flex items-stretch">
         <Link
-          to={`/notes/${encodeURIComponent(note.id)}`}
+          to={`/n/${encodeURIComponent(note.id)}`}
           className="block flex-1 min-w-0 px-4 py-3 hover:bg-bg/60 focus:bg-bg/60 focus:outline-none"
         >
           <div className="flex items-baseline justify-between gap-4">

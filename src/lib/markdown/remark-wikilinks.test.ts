@@ -36,7 +36,7 @@ describe("remarkWikilinks", () => {
     );
     const links = flattenLinks(tree as unknown as LinkLike);
     expect(links).toHaveLength(1);
-    expect(links[0]?.url).toBe("/notes/abc-123");
+    expect(links[0]?.url).toBe("/n/abc-123");
     const cls = links[0]?.data?.hProperties?.className as string;
     expect(cls).toContain("wikilink-resolved");
     expect(links[0]?.children?.[0]?.value).toBe("Canon/Uni");
@@ -48,7 +48,7 @@ describe("remarkWikilinks", () => {
     expect(links).toHaveLength(1);
     const cls = links[0]?.data?.hProperties?.className as string;
     expect(cls).toContain("wikilink-unresolved");
-    expect(links[0]?.url).toBe("/notes/Missing%2FNote");
+    expect(links[0]?.url).toBe("/n/Missing%2FNote");
   });
 
   it("honors the display text form [[target|Display]]", () => {
@@ -87,8 +87,8 @@ describe("remarkWikilinks", () => {
     );
     const links = flattenLinks(tree as unknown as LinkLike);
     expect(links).toHaveLength(3);
-    expect(links[0]?.url).toBe("/notes/a-id");
-    expect(links[1]?.url).toBe("/notes/B");
-    expect(links[2]?.url).toBe("/notes/c-id");
+    expect(links[0]?.url).toBe("/n/a-id");
+    expect(links[1]?.url).toBe("/n/B");
+    expect(links[2]?.url).toBe("/n/c-id");
   });
 });

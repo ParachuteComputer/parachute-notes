@@ -47,7 +47,7 @@ export function Header() {
         <div className="hidden items-center gap-3 md:flex">
           {hasVaults ? (
             <>
-              <Link to="/notes" className="text-sm text-fg-muted hover:text-accent">
+              <Link to="/" className="text-sm text-fg-muted hover:text-accent">
                 Notes
               </Link>
               <Link to="/tags" className="text-sm text-fg-muted hover:text-accent">
@@ -122,7 +122,7 @@ export function Header() {
         <div id="mobile-menu" className="border-t border-border bg-bg/95 px-6 py-4 md:hidden">
           {hasVaults ? (
             <div className="flex flex-col gap-3">
-              <Link to="/notes" className="py-1 text-sm text-fg hover:text-accent">
+              <Link to="/" className="py-1 text-sm text-fg hover:text-accent">
                 Notes
               </Link>
               <Link to="/tags" className="py-1 text-sm text-fg hover:text-accent">

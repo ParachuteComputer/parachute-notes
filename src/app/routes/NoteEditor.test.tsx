@@ -172,9 +172,9 @@ function renderAt(path: string) {
   return render(
     <MemoryRouter initialEntries={[path]}>
       <Routes>
-        <Route path="/notes/:id/edit" element={<NoteEditor />} />
-        <Route path="/notes/:id" element={<div>NoteViewPage</div>} />
-        <Route path="/notes" element={<div>NotesListPage</div>} />
+        <Route path="/n/:id/edit" element={<NoteEditor />} />
+        <Route path="/n/:id" element={<div>NoteViewPage</div>} />
+        <Route path="/" element={<div>NotesListPage</div>} />
       </Routes>
     </MemoryRouter>,
     { wrapper: Wrapper },
@@ -210,7 +210,7 @@ describe("NoteEditor route", () => {
 
   it("renders the editor seeded from the note and shows Save disabled until dirty", async () => {
     installFetch({ "/api/notes": { body: baseNote } });
-    renderAt("/notes/abc-123/edit");
+    renderAt("/n/abc-123/edit");
 
     const cm = (await screen.findByTestId("cm-editor")) as HTMLTextAreaElement;
     expect(cm.value).toBe(baseNote.content);
@@ -231,7 +231,7 @@ describe("NoteEditor route", () => {
       "PATCH /api/notes/": { body: updated },
     });
 
-    renderAt("/notes/abc-123/edit");
+    renderAt("/n/abc-123/edit");
     const cm = (await screen.findByTestId("cm-editor")) as HTMLTextAreaElement;
 
     fireEvent.change(cm, { target: { value: "# hi\n\nbody more" } });
@@ -265,7 +265,7 @@ describe("NoteEditor route", () => {
 
   it("Revert resets draft back to baseline and clears dirty", async () => {
     installFetch({ "/api/notes": { body: baseNote } });
-    renderAt("/notes/abc-123/edit");
+    renderAt("/n/abc-123/edit");
 
     const cm = (await screen.findByTestId("cm-editor")) as HTMLTextAreaElement;
     fireEvent.change(cm, { target: { value: "changed" } });
@@ -291,7 +291,7 @@ describe("NoteEditor route", () => {
       },
     });
 
-    renderAt("/notes/abc-123/edit");
+    renderAt("/n/abc-123/edit");
     const cm = (await screen.findByTestId("cm-editor")) as HTMLTextAreaElement;
     fireEvent.change(cm, { target: { value: "stale edit" } });
 
@@ -308,7 +308,7 @@ describe("NoteEditor route", () => {
 
   it("path edit surfaces the rename warning", async () => {
     installFetch({ "/api/notes": { body: baseNote } });
-    renderAt("/notes/abc-123/edit");
+    renderAt("/n/abc-123/edit");
 
     const pathInput = (await screen.findByLabelText(/note path/i)) as HTMLInputElement;
     fireEvent.change(pathInput, { target: { value: "Canon/Aaron-v2" } });
@@ -329,7 +329,7 @@ describe("NoteEditor route", () => {
       },
     });
     const xhrs = installXhr();
-    renderAt("/notes/abc-123/edit");
+    renderAt("/n/abc-123/edit");
 
     const cm = await screen.findByTestId("cm-editor");
     const dropZone = cm.closest("div.relative");
@@ -376,7 +376,7 @@ describe("NoteEditor route", () => {
   it("oversized file is rejected before any upload fires", async () => {
     installFetch({ "GET /api/notes": { body: baseNote } });
     const xhrs = installXhr();
-    renderAt("/notes/abc-123/edit");
+    renderAt("/n/abc-123/edit");
 
     const cm = await screen.findByTestId("cm-editor");
     const dropZone = cm.closest("div.relative");

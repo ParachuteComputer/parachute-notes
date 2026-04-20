@@ -60,7 +60,7 @@ function ConfirmDeleteDialog({ note, onClose }: { note: Note; onClose(): void })
     mutation.mutate(note.id, {
       onSuccess: () => {
         pushToast(`Deleted ${confirmLabel}`, "success");
-        navigate("/notes");
+        navigate("/");
       },
       onError: (e) => {
         if (e instanceof VaultAuthError) {

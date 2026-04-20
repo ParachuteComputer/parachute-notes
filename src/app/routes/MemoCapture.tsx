@@ -239,7 +239,7 @@ export function MemoCapture({ embedded = false }: { embedded?: boolean } = {}) {
         previewUrlRef.current = null;
       }
       pushToast("Memo saved — syncing to your vault.", "success");
-      navigate("/notes");
+      navigate("/");
     } catch (e) {
       setPhase({
         kind: "review",
@@ -383,7 +383,7 @@ export function MemoCapture({ embedded = false }: { embedded?: boolean } = {}) {
   return (
     <div className="mx-auto max-w-2xl px-6 py-8">
       <nav className="mb-4 text-sm text-fg-dim">
-        <Link to="/notes" className="hover:text-accent">
+        <Link to="/" className="hover:text-accent">
           ← All notes
         </Link>
       </nav>

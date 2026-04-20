@@ -147,7 +147,7 @@ function GraphCanvas({ data }: { data: NeighborhoodGraphData }) {
           cooldownTicks={80}
           onNodeClick={(n) => {
             const node = n as unknown as GraphNode;
-            navigate(`/notes/${encodeURIComponent(node.id)}`);
+            navigate(`/n/${encodeURIComponent(node.id)}`);
           }}
         />
       </Suspense>

@@ -2,9 +2,10 @@ import { Header } from "@/components/Header";
 import { QuickSwitchMount } from "@/components/QuickSwitchMount";
 import { Toaster } from "@/components/Toaster";
 import { UpdateBanner } from "@/components/UpdateBanner";
+import { useVaultStore } from "@/lib/vault";
 import { QueryProvider } from "@/providers/QueryProvider";
 import { SyncProvider } from "@/providers/SyncProvider";
-import { BrowserRouter, Route, Routes } from "react-router";
+import { BrowserRouter, Navigate, Route, Routes } from "react-router";
 import { Activity } from "./routes/Activity";
 import { AddVault } from "./routes/AddVault";
 import { Calendar } from "./routes/Calendar";
@@ -21,6 +22,15 @@ import { Today } from "./routes/Today";
 import { VaultGraph } from "./routes/VaultGraph";
 import { Vaults } from "./routes/Vaults";
 
+// Index dispatcher: render the notes list when a vault is connected, else the
+// landing page. Both live at internal `/`, which maps to external `/notes/`
+// via BrowserRouter's basename. Keeps Notes free of "no vault?" presentation
+// concerns and Home free of any redirect logic.
+function NotesIndex() {
+  const activeVault = useVaultStore((s) => s.getActiveVault());
+  return activeVault ? <Notes /> : <Home />;
+}
+
 export function App() {
   return (
     <QueryProvider>
@@ -33,8 +43,7 @@ export function App() {
             <QuickSwitchMount />
             <main>
               <Routes>
-                <Route path="/" element={<Home />} />
-                <Route path="/notes" element={<Notes />} />
+                <Route path="/" element={<NotesIndex />} />
                 <Route path="/pinned" element={<Notes preset="pinned" />} />
                 <Route path="/archived" element={<Notes preset="archived" />} />
                 <Route path="/untagged" element={<Notes preset="untagged" />} />
@@ -46,13 +55,13 @@ export function App() {
                 <Route path="/today" element={<Today />} />
                 <Route path="/calendar" element={<Calendar />} />
                 <Route path="/activity" element={<Activity />} />
-                <Route path="/notes/:id" element={<NoteView />} />
-                <Route path="/notes/:id/edit" element={<NoteEditor />} />
+                <Route path="/n/:id" element={<NoteView />} />
+                <Route path="/n/:id/edit" element={<NoteEditor />} />
                 <Route path="/add" element={<AddVault />} />
                 <Route path="/oauth/callback" element={<OAuthCallback />} />
                 <Route path="/vaults" element={<Vaults />} />
                 <Route path="/settings" element={<Settings />} />
-                <Route path="*" element={<Home />} />
+                <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>
             </main>
             <footer className="mx-auto max-w-5xl px-6 py-10 text-center text-sm text-fg-dim">

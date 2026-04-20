@@ -29,7 +29,7 @@ export function NoteEditor() {
     <div className="mx-auto max-w-6xl px-6 py-8">
       <nav className="mb-4 text-sm text-fg-dim">
         <Link
-          to={decodedId ? `/notes/${encodeURIComponent(decodedId)}` : "/notes"}
+          to={decodedId ? `/n/${encodeURIComponent(decodedId)}` : "/"}
           className="hover:text-accent"
         >
           ← Back to note
@@ -129,7 +129,7 @@ function EditorSurface({ note }: { note: Note }) {
         lastServerNote.current = updated;
         // If path change moved the note to a new id, land on the new URL.
         if (updated.id !== note.id) {
-          navigate(`/notes/${encodeURIComponent(updated.id)}/edit`, { replace: true });
+          navigate(`/n/${encodeURIComponent(updated.id)}/edit`, { replace: true });
         }
       },
       onError: (err) => {
@@ -150,7 +150,7 @@ function EditorSurface({ note }: { note: Note }) {
 
   const handleCancel = useCallback(() => {
     if (isDirty && !confirm("Discard unsaved changes?")) return;
-    navigate(`/notes/${encodeURIComponent(note.id)}`);
+    navigate(`/n/${encodeURIComponent(note.id)}`);
   }, [isDirty, navigate, note.id]);
 
   // Prevent tab close with unsaved edits.
@@ -447,7 +447,7 @@ function NotFoundBlock({ id }: { id: string }) {
       <p className="mb-4 text-sm text-fg-muted">
         No note with id <span className="font-mono">{id}</span> in this vault.
       </p>
-      <Link to="/notes" className="text-sm text-accent hover:underline">
+      <Link to="/" className="text-sm text-accent hover:underline">
         Back to all notes
       </Link>
     </div>

@@ -279,7 +279,7 @@ function GraphCanvas({
           }}
           onNodeClick={(n) => {
             const node = n as unknown as VaultGraphNode;
-            navigate(`/notes/${encodeURIComponent(node.id)}`);
+            navigate(`/n/${encodeURIComponent(node.id)}`);
           }}
         />
       </Suspense>

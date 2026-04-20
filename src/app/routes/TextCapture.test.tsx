@@ -51,7 +51,7 @@ function renderAt(path: string) {
     <MemoryRouter initialEntries={[path]}>
       <Routes>
         <Route path="/capture" element={<TextCapture />} />
-        <Route path="/notes" element={<div>NotesListPage</div>} />
+        <Route path="/" element={<div>NotesListPage</div>} />
       </Routes>
     </MemoryRouter>,
     { wrapper: Wrapper },
