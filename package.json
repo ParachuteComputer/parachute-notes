@@ -9,6 +9,11 @@
     "type": "git",
     "url": "https://github.com/ParachuteComputer/parachute-notes.git"
   },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
@@ -18,7 +23,8 @@
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
     "format": "biome format --write .",
-    "typecheck": "tsc -b --noEmit"
+    "typecheck": "tsc -b --noEmit",
+    "prepublishOnly": "bun run build"
   },
   "dependencies": {
     "@codemirror/commands": "^6.10.3",
