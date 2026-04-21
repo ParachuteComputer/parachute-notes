@@ -16,26 +16,29 @@ const DEFAULT_TIMEOUT_MS = 2500;
 
 // Probe an input URL for a Parachute OAuth issuer. Two paths, in this order:
 //
-//   1. Direct OAuth discovery: `${input}/.well-known/oauth-authorization-server`.
-//      Matches the hub-as-portal Phase 0 seam (hub advertises its own origin
-//      as issuer; vault's OAuth is proxied behind it) *and* the standalone
-//      vault case where the user pastes a full vault URL. We try this first
-//      because the hub origin usually doesn't serve a parachute.json.
-//   2. Ecosystem registry fallback: `${origin}/.well-known/parachute.json` →
-//      pick a vault entry (name=default, else first) → validate by hitting
-//      its OAuth metadata. Useful when the user pastes a bare host that only
-//      publishes the registry.
+//   1. Ecosystem registry: `${origin}/.well-known/parachute.json` → pick a
+//      vault entry (name=default, else first) → validate by hitting its
+//      OAuth metadata. This is the path that matters for the hub-as-portal
+//      case: the hub origin *itself* proxies OAuth metadata (so direct
+//      discovery would succeed at the hub origin, which isn't a vault),
+//      but only the registry reveals the actual vault resource URL
+//      (`${origin}/vault/<name>`). Preferring the registry ensures Lens
+//      ends up pointing at the vault and not at the portal.
+//   2. Direct OAuth discovery fallback:
+//      `${input}/.well-known/oauth-authorization-server`. Covers the
+//      standalone vault case (user pastes `http://localhost:1940`) and
+//      the vault-behind-a-non-hub-proxy case (user pastes
+//      `https://my-vault.example.com/vault/default`) — neither serves
+//      parachute.json, but both answer OAuth metadata directly.
 //
-// Returns the URL that successfully resolves OAuth metadata (either the input
-// itself or the registry-pointed vault URL), or null if neither path resolves.
+// Returns the URL that successfully resolves OAuth metadata (either the
+// registry-pointed vault URL or the input itself), or null if neither
+// path resolves.
 export async function probeVaultAtOrigin(
   origin: string,
   timeoutMs: number = DEFAULT_TIMEOUT_MS,
   fetchImpl: typeof fetch = fetch.bind(globalThis),
 ): Promise<string | null> {
-  const direct = await tryDiscoverAuthServer(origin, timeoutMs, fetchImpl);
-  if (direct) return direct;
-
   const manifest = await fetchParachuteJson(origin, timeoutMs, fetchImpl);
   if (manifest) {
     const chosen = pickVault(manifest);
@@ -44,6 +47,9 @@ export async function probeVaultAtOrigin(
       if (validated) return validated;
     }
   }
+
+  const direct = await tryDiscoverAuthServer(origin, timeoutMs, fetchImpl);
+  if (direct) return direct;
 
   return null;
 }
