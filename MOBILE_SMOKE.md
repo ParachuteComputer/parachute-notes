@@ -49,7 +49,7 @@ Prereq: tailnet chain is up (`parachute expose tailnet` on your Mac, hub + lens 
 - [ ] Tap-and-hold record button, say "testing voice memo one two three"
 - [ ] Release → progress indicator shows "uploading"
 - [ ] Note appears with audio attachment
-- [ ] If scribe is wired, transcript appears in note content within ~10s
+- [ ] If the vault has scribe configured, transcript replaces `_Transcript pending._` in the note within ~10s (transcription is vault-level — Lens just flags `transcribe: true` on the attachment)
 
 ### 6. Offline
 
@@ -102,6 +102,6 @@ Same steps as Android, with iOS-specific checks:
 - Install prompt never appears → manifest.json or service worker issue. Open DevTools → Application tab → Manifest, Service Workers.
 - OAuth fails → check `/.well-known/oauth-authorization-server` resolves, check mixed-content (HTTPS required for PKCE).
 - Voice memo records but upload fails → check CORS on vault, network tab for actual request.
-- Transcript never appears → scribe not wired; see SCRIBE_URL in vault's .env.
+- Transcript never appears → scribe not wired on the vault side (Lens just flags `transcribe: true` on the attachment; the vault's transcription-worker is what invokes scribe). Check the vault's `SCRIBE_URL` / scribe config.
 
 Report outcomes as a checklist back in this file or as a GitHub issue, with device + OS version.

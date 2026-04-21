@@ -8,18 +8,12 @@ import {
   pickMimeType,
   requestMic,
 } from "@/lib/capture/recorder";
-import { loadScribeSettings } from "@/lib/scribe";
 import { blobRef, enqueue, newBlobId, newLocalId } from "@/lib/sync";
 import { useToastStore } from "@/lib/toast/store";
 import { useTagRoles, useVaultStore } from "@/lib/vault";
 import { useSync } from "@/providers/SyncProvider";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, Navigate, useNavigate } from "react-router";
-
-// The stub line that `memoNoteContent` seeds. transcribe-memo looks for this
-// substring server-side before replacing; if the user has edited it out, we
-// don't clobber their work.
-const TRANSCRIPT_MARKER = "_Transcript pending._";
 
 type Phase =
   | { kind: "idle" }
@@ -180,11 +174,6 @@ export function MemoCapture({ embedded = false }: { embedded?: boolean } = {}) {
     const content = memoNoteContent(filename, recordedAt);
     const localId = newLocalId();
     const blobId = newBlobId();
-    // Only enqueue transcription (and retain the blob beyond upload) when the
-    // active vault has scribe configured. Otherwise memos save exactly as
-    // before, just without a transcript pass.
-    const scribe = loadScribeSettings(activeVault.id);
-    const willTranscribe = scribe !== null;
     try {
       await blobStore.put(blobId, phase.data, phase.mimeType, activeVault.id);
       await enqueue(
@@ -203,10 +192,12 @@ export function MemoCapture({ embedded = false }: { embedded?: boolean } = {}) {
           blobId,
           filename,
           mimeType: phase.mimeType,
-          retain: willTranscribe,
         },
         { vaultId: activeVault.id },
       );
+      // `transcribe: true` asks vault's transcription-worker to replace the
+      // note's `_Transcript pending._` placeholder once it's processed the
+      // audio. Vault decides whether transcription is actually configured.
       await enqueue(
         db,
         {
@@ -214,23 +205,10 @@ export function MemoCapture({ embedded = false }: { embedded?: boolean } = {}) {
           noteId: localId,
           pathRef: blobRef(blobId),
           mimeType: phase.mimeType,
+          transcribe: true,
         },
         { vaultId: activeVault.id },
       );
-      if (willTranscribe) {
-        await enqueue(
-          db,
-          {
-            kind: "transcribe-memo",
-            noteId: localId,
-            blobId,
-            filename,
-            mimeType: phase.mimeType,
-            marker: TRANSCRIPT_MARKER,
-          },
-          { vaultId: activeVault.id },
-        );
-      }
       // Kick the engine so online users see it flush right away; offline it
       // no-ops and the next online event picks it up.
       void engine?.runOnce();
@@ -372,7 +350,7 @@ export function MemoCapture({ embedded = false }: { embedded?: boolean } = {}) {
         <p className="mb-1 font-medium text-fg-muted">Tips</p>
         <ul className="list-inside list-disc space-y-0.5">
           <li>Recording stops if you leave the tab or lock your screen.</li>
-          <li>Audio is saved in your vault; transcription runs if scribe is configured.</li>
+          <li>Audio is saved in your vault; transcription runs if the vault has it configured.</li>
           <li>If you're offline, memos queue up and sync when you're back.</li>
         </ul>
       </aside>

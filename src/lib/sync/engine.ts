@@ -1,4 +1,3 @@
-import type { ScribeSettings } from "@/lib/scribe";
 import type { VaultClient } from "@/lib/vault/client";
 import type { BlobStore } from "./blob-store";
 import type { LensDB } from "./db";
@@ -8,10 +7,6 @@ import type { DrainOutcome } from "./types";
 export interface EngineDrainContext {
   client: VaultClient;
   vaultId: string;
-  // Per-vault scribe settings — passed through to drain so transcribe-memo
-  // rows have somewhere to POST. `null` (or missing) drops transcribe rows
-  // rather than retrying forever.
-  scribeSettings?: ScribeSettings | null;
 }
 
 export interface EngineOptions {
@@ -86,7 +81,6 @@ export class SyncEngine {
         client: ctx.client,
         vaultId: ctx.vaultId,
         blobStore: this.opts.blobStore,
-        scribeSettings: ctx.scribeSettings ?? null,
       });
       this.opts.onDrain?.(outcome);
       return outcome;

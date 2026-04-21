@@ -286,7 +286,7 @@ export class VaultClient {
 
   async linkAttachment(
     noteIdOrPath: string,
-    body: { path: string; mimeType: string },
+    body: { path: string; mimeType: string; transcribe?: boolean },
   ): Promise<NoteAttachment> {
     return this.request<NoteAttachment>(
       `/api/notes/${encodeURIComponent(noteIdOrPath)}/attachments`,

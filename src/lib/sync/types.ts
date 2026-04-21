@@ -9,8 +9,7 @@ export type PendingKind =
   | "delete-note"
   | "upload-attachment"
   | "link-attachment"
-  | "delete-attachment"
-  | "transcribe-memo";
+  | "delete-attachment";
 
 export interface PendingCreateNote {
   kind: "create-note";
@@ -38,10 +37,6 @@ export interface PendingUploadAttachment {
   blobId: string;
   filename: string;
   mimeType: string;
-  // When true, the blob is kept in the store after a successful upload so
-  // downstream rows (currently just `transcribe-memo`) can still read it.
-  // Those rows are responsible for deleting the blob when they finish.
-  retain?: boolean;
 }
 
 export interface PendingLinkAttachment {
@@ -52,6 +47,10 @@ export interface PendingLinkAttachment {
   // which resolves to the server path once the matching upload-attachment row drains.
   pathRef: string;
   mimeType: string;
+  // When true, ask the vault to transcribe this attachment and overwrite the
+  // note's `_Transcript pending._` placeholder with the transcript. Vault's
+  // transcription-worker does the actual work — Lens just flags intent.
+  transcribe?: boolean;
 }
 
 export interface PendingDeleteAttachment {
@@ -60,29 +59,13 @@ export interface PendingDeleteAttachment {
   attachmentId: string;
 }
 
-export interface PendingTranscribeMemo {
-  kind: "transcribe-memo";
-  // Server or local id — resolved against the id-map at drain time like other rows.
-  noteId: string;
-  // Blob kept alive by an upstream upload-attachment row with retain=true.
-  blobId: string;
-  filename: string;
-  mimeType: string;
-  // Substring that must still appear in the note's content for the transcript
-  // to overwrite it. If the user edited the note before the transcript
-  // arrived, the marker will be gone and we skip clobbering. Defaults to
-  // "_Transcript pending._" to match the MemoCapture stub.
-  marker: string;
-}
-
 export type PendingPayload =
   | PendingCreateNote
   | PendingUpdateNote
   | PendingDeleteNote
   | PendingUploadAttachment
   | PendingLinkAttachment
-  | PendingDeleteAttachment
-  | PendingTranscribeMemo;
+  | PendingDeleteAttachment;
 
 export type PendingStatus = "pending" | "needs-human";
 
