@@ -1,29 +1,18 @@
-import { useQueueStatus } from "@/lib/sync";
-import { useVaultStore } from "@/lib/vault";
-import { useSync } from "@/providers/SyncProvider";
+// Single-purpose chip for voice-memo notes. Vault's transcription-worker
+// seeds the note with `_Transcript pending._` and swaps it for either the
+// transcript or `_Transcription unavailable._` when it finishes. We mirror
+// that state into the editor so the user isn't staring at a placeholder
+// wondering whether anything is happening.
 
-// Single-purpose chip for voice-memo notes. A transcribe-memo row sits in the
-// queue from capture-time until either the server returns a transcript or the
-// engine gives up after 24h. The "unavailable" marker is a string the
-// transcribe step writes into the note body when it exhausts retries — we
-// detect it by content match because by that point the queue row is gone.
-
+const PENDING_MARKER = "_Transcript pending._";
 const UNAVAILABLE_MARKER = "_Transcription unavailable._";
 
 export function TranscriptionStatus({
-  noteId,
   content,
 }: {
-  noteId: string;
   content: string;
 }) {
-  const { db } = useSync();
-  const activeVaultId = useVaultStore((s) => s.activeVaultId);
-  const status = useQueueStatus(db, activeVaultId);
-
-  const pending = status.rows.some(
-    (r) => r.mutation.kind === "transcribe-memo" && r.mutation.noteId === noteId,
-  );
+  const pending = content.includes(PENDING_MARKER);
   const unavailable = !pending && content.includes(UNAVAILABLE_MARKER);
 
   if (pending) {

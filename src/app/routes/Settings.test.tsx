@@ -2,23 +2,9 @@ import { Settings } from "@/app/routes/Settings";
 import { useToastStore } from "@/lib/toast/store";
 import { useVaultStore } from "@/lib/vault/store";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-
-// Stub scribe client so the connection-test button hits our fake instead of
-// making a real network call.
-const scribeFake = {
-  health: vi.fn<() => Promise<boolean>>(async () => true),
-};
-
-vi.mock("@/lib/scribe", async () => {
-  const actual = await vi.importActual<typeof import("@/lib/scribe")>("@/lib/scribe");
-  return {
-    ...actual,
-    scribeHealth: () => scribeFake.health(),
-  };
-});
 
 function seedActiveVault() {
   useVaultStore.setState({
@@ -52,19 +38,11 @@ function renderSettings() {
   );
 }
 
-function scribeSection(): HTMLElement {
-  const heading = screen.getByRole("heading", { name: /transcription/i });
-  const section = heading.closest("section");
-  if (!section) throw new Error("scribe section not found");
-  return section as HTMLElement;
-}
-
 describe("Settings route", () => {
   beforeEach(() => {
     localStorage.clear();
     useVaultStore.setState({ vaults: {}, activeVaultId: null });
     useToastStore.setState({ toasts: [] });
-    scribeFake.health = vi.fn(async () => true);
     seedActiveVault();
   });
 
@@ -78,69 +56,9 @@ describe("Settings route", () => {
     expect(screen.getByText("HomePage")).toBeInTheDocument();
   });
 
-  it("renders the scribe section for the active vault", () => {
+  it("does not render a scribe section — transcription is vault-level", () => {
     renderSettings();
-    expect(screen.getByRole("heading", { name: /transcription/i })).toBeInTheDocument();
-    expect(screen.getByPlaceholderText(/localhost:3200/)).toBeInTheDocument();
-  });
-
-  it("saves scribe settings to localStorage on Save", async () => {
-    renderSettings();
-    const urlInput = screen.getByPlaceholderText(/localhost:3200/) as HTMLInputElement;
-    await act(async () => {
-      fireEvent.change(urlInput, { target: { value: "http://scribe.dev" } });
-    });
-    await act(async () => {
-      fireEvent.click(within(scribeSection()).getByRole("button", { name: /^save$/i }));
-    });
-    const stored = JSON.parse(localStorage.getItem("lens:scribe:dev") ?? "{}");
-    expect(stored.url).toBe("http://scribe.dev");
-    expect(useToastStore.getState().toasts[0]?.message).toContain("Scribe settings saved");
-  });
-
-  it("shows success when test-connection succeeds", async () => {
-    scribeFake.health = vi.fn(async () => true);
-    renderSettings();
-    const urlInput = screen.getByPlaceholderText(/localhost:3200/) as HTMLInputElement;
-    await act(async () => {
-      fireEvent.change(urlInput, { target: { value: "http://scribe.dev" } });
-    });
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: /test connection/i }));
-    });
-    await waitFor(() => {
-      expect(screen.getByText(/scribe is reachable/i)).toBeInTheDocument();
-    });
-  });
-
-  it("shows failure when test-connection fails", async () => {
-    scribeFake.health = vi.fn(async () => false);
-    renderSettings();
-    const urlInput = screen.getByPlaceholderText(/localhost:3200/) as HTMLInputElement;
-    await act(async () => {
-      fireEvent.change(urlInput, { target: { value: "http://scribe.dev" } });
-    });
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: /test connection/i }));
-    });
-    await waitFor(() => {
-      expect(screen.getByText(/couldn't reach scribe/i)).toBeInTheDocument();
-    });
-  });
-
-  it("pre-fills from stored settings and clears on Clear", async () => {
-    localStorage.setItem(
-      "lens:scribe:dev",
-      JSON.stringify({ url: "http://scribe.dev", cleanup: true }),
-    );
-    renderSettings();
-    const urlInput = screen.getByPlaceholderText(/localhost:3200/) as HTMLInputElement;
-    expect(urlInput.value).toBe("http://scribe.dev");
-    vi.spyOn(window, "confirm").mockReturnValue(true);
-    await act(async () => {
-      fireEvent.click(within(scribeSection()).getByRole("button", { name: /^clear$/i }));
-    });
-    expect(localStorage.getItem("lens:scribe:dev")).toBeNull();
+    expect(screen.queryByRole("heading", { name: /transcription/i })).not.toBeInTheDocument();
   });
 
   it("renders tag roles with defaults and saves overrides to localStorage", async () => {

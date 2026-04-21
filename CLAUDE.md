@@ -27,8 +27,7 @@ Instead, add the tag to the `TagRoles` object and read it at the point of use.
 
 - Type + helpers: `src/lib/vault/tag-roles.ts`
 - Settings UI: `TagRolesSection` in `src/app/routes/Settings.tsx`
-- Storage key: `lens:tag-roles:<vaultId>` in `localStorage` (per-vault, like
-  `lens:scribe:<vaultId>`)
+- Storage key: `lens:tag-roles:<vaultId>` in `localStorage` (per-vault)
 
 ### Current roles
 
@@ -56,8 +55,7 @@ Instead, add the tag to the `TagRoles` object and read it at the point of use.
 
 ### Pattern: per-vault UI/integration settings in general
 
-Other per-vault settings (currently just scribe: `src/lib/scribe/settings.ts`)
-follow the same shape:
+Other per-vault settings follow the same shape:
 
 - Plain `load<Feature>(vaultId)` / `save<Feature>(vaultId, x)` /
   `delete<Feature>(vaultId)` around `localStorage` with a key of
@@ -69,6 +67,16 @@ follow the same shape:
 
 Reach for this primitive (not a new store pattern) when you need "a small
 JSON blob that belongs to a single vault and rarely changes."
+
+## Transcription is vault-level, not Lens-level
+
+Lens uploads audio attachments. When the attachment POST body carries
+`{ transcribe: true }`, the vault's transcription-worker picks the job up
+and (if scribe is wired) overwrites the note's `_Transcript pending._`
+placeholder with the actual transcript. Lens has no scribe client, no
+scribe settings UI, and no direct knowledge of whether transcription is
+configured — that's the vault's concern. If a user wants voice memos with
+transcripts, they configure scribe in the vault once, not per-device.
 
 ## Post-merge hygiene
 

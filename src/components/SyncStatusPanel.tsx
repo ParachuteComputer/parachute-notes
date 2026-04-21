@@ -26,7 +26,6 @@ const KIND_LABELS: Record<string, string> = {
   "upload-attachment": "uploads",
   "link-attachment": "attachment links",
   "delete-attachment": "attachment removals",
-  "transcribe-memo": "transcriptions",
 };
 
 // Trip point for the storage warning. At 80% of quota we surface a gentle
@@ -212,8 +211,6 @@ export function describeMutation(m: PendingPayload): string {
       return `Link attachment to ${m.noteId}`;
     case "delete-attachment":
       return `Remove attachment from ${m.noteId}`;
-    case "transcribe-memo":
-      return `Transcribe ${m.filename}`;
   }
 }
 

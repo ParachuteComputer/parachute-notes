@@ -1,4 +1,3 @@
-import { loadScribeSettings } from "@/lib/scribe";
 import { type BlobStore, createBlobStore } from "@/lib/sync/blob-store";
 import { type LensDB, openLensDB } from "@/lib/sync/db";
 import { SyncEngine } from "@/lib/sync/engine";
@@ -133,9 +132,7 @@ export function SyncProvider({ children }: { children: ReactNode }): ReactNode {
         const c = clientRef.current;
         const v = activeVaultIdRef.current;
         if (!c || !v) return null;
-        // Re-read per tick — settings live in localStorage and may change
-        // between drains without any React-tree signal.
-        return { client: c, vaultId: v, scribeSettings: loadScribeSettings(v) };
+        return { client: c, vaultId: v };
       },
       onDrainStart: () => {
         setIsDraining(true);

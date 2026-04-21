@@ -184,7 +184,7 @@ describe("MemoCapture route", () => {
     });
   });
 
-  it("record → stop → save enqueues create-note, upload-attachment, link-attachment", async () => {
+  it("record → stop → save enqueues create-note, upload-attachment, link-attachment with transcribe:true", async () => {
     renderAt("/capture");
 
     await act(async () => {
@@ -216,7 +216,8 @@ describe("MemoCapture route", () => {
     const rows = await listPending(db, "dev");
     const kinds = rows.map((r) => r.mutation.kind);
     expect(kinds).toEqual(["create-note", "upload-attachment", "link-attachment"]);
-    // The link-attachment row should reference the blob of the upload row via blob:<id>.
+    // The link-attachment row should reference the blob of the upload row via blob:<id>,
+    // and must flag `transcribe: true` so vault's transcription-worker picks it up.
     const link = rows.find((r) => r.mutation.kind === "link-attachment")!;
     const upload = rows.find((r) => r.mutation.kind === "upload-attachment")!;
     if (link.mutation.kind !== "link-attachment" || upload.mutation.kind !== "upload-attachment") {
@@ -224,62 +225,10 @@ describe("MemoCapture route", () => {
     }
     expect(link.mutation.pathRef).toBe(`blob:${upload.mutation.blobId}`);
     expect(link.mutation.mimeType).toBe("audio/webm;codecs=opus");
+    expect(link.mutation.transcribe).toBe(true);
     if (rows[0].mutation.kind === "create-note") {
       expect(rows[0].mutation.payload.path).toMatch(/^Memos\//);
       expect(rows[0].mutation.payload.tags).toEqual(["voice"]);
-    }
-    // Without scribe configured, upload-attachment should not retain the blob.
-    if (upload.mutation.kind === "upload-attachment") {
-      expect(upload.mutation.retain).not.toBe(true);
-    }
-    db.close();
-  });
-
-  it("enqueues a transcribe-memo row when scribe is configured", async () => {
-    localStorage.setItem(
-      "lens:scribe:dev",
-      JSON.stringify({ url: "http://scribe.local:3200", cleanup: false }),
-    );
-    renderAt("/capture");
-
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: /start recording/i }));
-    });
-    await waitFor(() => {
-      expect(screen.getByRole("button", { name: /^stop$/i })).toBeInTheDocument();
-    });
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: /^stop$/i }));
-    });
-    await waitFor(() => {
-      expect(screen.getByRole("button", { name: /save memo/i })).toBeInTheDocument();
-    });
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: /save memo/i }));
-    });
-    await waitFor(() => {
-      expect(screen.getByText("NotesListPage")).toBeInTheDocument();
-    });
-
-    const db = await openLensDB();
-    const rows = await listPending(db, "dev");
-    const kinds = rows.map((r) => r.mutation.kind);
-    expect(kinds).toEqual([
-      "create-note",
-      "upload-attachment",
-      "link-attachment",
-      "transcribe-memo",
-    ]);
-    const upload = rows.find((r) => r.mutation.kind === "upload-attachment")!;
-    if (upload.mutation.kind === "upload-attachment") {
-      expect(upload.mutation.retain).toBe(true);
-    }
-    const transcribe = rows.find((r) => r.mutation.kind === "transcribe-memo")!;
-    if (transcribe.mutation.kind === "transcribe-memo") {
-      expect(transcribe.mutation.marker).toBe("_Transcript pending._");
-      expect(transcribe.mutation.blobId).toBe(
-        upload.mutation.kind === "upload-attachment" ? upload.mutation.blobId : "",
-      );
     }
     db.close();
   });

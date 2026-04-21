@@ -89,7 +89,7 @@ function NoteBody({ note }: { note: Note }) {
           </div>
         </header>
 
-        <TranscriptionStatus noteId={note.id} content={note.content ?? ""} />
+        <TranscriptionStatus content={note.content ?? ""} />
 
         <MarkdownView content={note.content ?? ""} resolve={resolver} />
 
