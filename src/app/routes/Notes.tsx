@@ -145,8 +145,13 @@ export function Notes({ preset }: { preset?: NotesPreset } = {}) {
   // Path tree: independent capped fetch (separate from the filtered list) so
   // the tree stays stable as the user narrows results. Disabled on preset
   // routes (no sidebar) and when the user has set the mode to `never`.
+  // Only fetches once the Folders accordion is opened — demoting it into a
+  // collapsed <details> would otherwise fire the 5000-note query on every
+  // Notes load, which is worst-of-both-worlds (hidden but still expensive).
   const { mode: pathTreeMode } = usePathTreeMode(activeVault?.id ?? null);
-  const treeEnabled = !preset && pathTreeMode !== "never";
+  const [foldersOpen, setFoldersOpen] = useState(false);
+  const showFoldersAccordion = !preset && pathTreeMode !== "never";
+  const treeEnabled = showFoldersAccordion && foldersOpen;
   const treeNotes = useNotesForPathTree(treeEnabled);
   const treePaths = useMemo(() => (treeNotes.data ?? []).map((n) => n.path), [treeNotes.data]);
   const showPathTree =
@@ -292,8 +297,12 @@ export function Notes({ preset }: { preset?: NotesPreset } = {}) {
                 isPending={savedViews.isPending}
                 error={savedViews.error}
               />
-              {showPathTree ? (
-                <details className="group">
+              {showFoldersAccordion ? (
+                <details
+                  className="group"
+                  open={foldersOpen}
+                  onToggle={(e) => setFoldersOpen(e.currentTarget.open)}
+                >
                   <summary className="flex cursor-pointer list-none items-center justify-between rounded-md px-1 py-1 text-xs uppercase tracking-wider text-fg-dim hover:text-accent">
                     <span>Folders</span>
                     <span
@@ -304,12 +313,20 @@ export function Notes({ preset }: { preset?: NotesPreset } = {}) {
                     </span>
                   </summary>
                   <div className="mt-2">
-                    <PathTree
-                      paths={treePaths}
-                      vaultId={activeVault.id}
-                      currentPrefix={pathPrefix}
-                      onSelect={(p) => setPathPrefix(p)}
-                    />
+                    {showPathTree ? (
+                      <PathTree
+                        paths={treePaths}
+                        vaultId={activeVault.id}
+                        currentPrefix={pathPrefix}
+                        onSelect={(p) => setPathPrefix(p)}
+                      />
+                    ) : treeNotes.isLoading ? (
+                      <p className="px-1 text-xs text-fg-dim">Loading…</p>
+                    ) : (
+                      <p className="px-1 text-xs text-fg-dim">
+                        Not enough folder variety to show a tree yet.
+                      </p>
+                    )}
                   </div>
                 </details>
               ) : null}
@@ -553,7 +570,7 @@ function NoteRow({
       <div className="flex items-stretch">
         <Link
           to={`/n/${encodeURIComponent(note.id)}`}
-          className="block flex-1 min-w-0 px-3 py-2.5 hover:bg-bg/60 focus:bg-bg/60 focus:outline-none md:px-4 md:py-3"
+          className="block flex-1 min-w-0 min-h-11 px-3 py-2.5 hover:bg-bg/60 focus:bg-bg/60 focus:outline-none md:min-h-0 md:px-4 md:py-3"
         >
           <div className="flex items-baseline justify-between gap-4">
             <span className="flex min-w-0 items-baseline gap-1.5">

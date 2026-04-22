@@ -60,6 +60,17 @@ function Wrapper({ children }: { children: ReactNode }) {
   );
 }
 
+function openFoldersAccordion() {
+  const details = document
+    .getElementById("notes-sidebar")
+    ?.querySelector("details") as HTMLDetailsElement | null;
+  if (!details) throw new Error("Folders accordion not found");
+  act(() => {
+    details.open = true;
+    details.dispatchEvent(new Event("toggle"));
+  });
+}
+
 function lastNotesUrl(fetchImpl: ReturnType<typeof installFetch>): string {
   // The saved-views sidebar also queries /api/notes (tag=view & views path
   // prefix). Filter those out so assertions target the primary list query.
@@ -309,6 +320,10 @@ describe("Notes route", () => {
 
     render(<Notes />, { wrapper: Wrapper });
 
+    // Folders accordion is collapsed by default — the tree is lazy-fetched
+    // on open.
+    await screen.findByText("A/note-0.md");
+    openFoldersAccordion();
     expect(await screen.findByRole("complementary", { name: /path tree/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /^A\b/ })).toBeInTheDocument();
   });
@@ -347,6 +362,8 @@ describe("Notes route", () => {
     });
 
     render(<Notes />, { wrapper: Wrapper });
+    await screen.findByText("Solo/note.md");
+    openFoldersAccordion();
     expect(await screen.findByRole("complementary", { name: /path tree/i })).toBeInTheDocument();
   });
 
@@ -505,6 +522,10 @@ describe("Notes route", () => {
 
     render(<Notes />, { wrapper: Wrapper });
 
+    // Folders accordion starts closed; open it so the tree query fires.
+    await screen.findByText("Canon/note-0.md");
+    openFoldersAccordion();
+
     const canonNode = await screen.findByRole("button", { name: /^Canon\b/ });
     fireEvent.click(canonNode);
 
@@ -513,6 +534,38 @@ describe("Notes route", () => {
     });
     await waitFor(() => {
       expect(lastNotesUrl(fetchImpl)).toContain("path_prefix=Canon");
+    });
+  });
+
+  it("does not fetch the path-tree query while the Folders accordion is closed", async () => {
+    const fetchImpl = installFetch({
+      notes: ["A", "B", "C", "D", "E"].map((root, i) => ({
+        id: `n${i}`,
+        path: `${root}/note-${i}.md`,
+        createdAt: "2026-04-18T10:00:00.000Z",
+        tags: [],
+      })),
+      tags: [],
+    });
+
+    render(<Notes />, { wrapper: Wrapper });
+
+    // Wait for the main notes list to settle so we know queries had a chance.
+    await screen.findByText("A/note-0.md");
+
+    const pathTreeCalls = fetchImpl.mock.calls
+      .map((c) => String(c[0]))
+      .filter((u) => u.includes("/api/notes") && u.includes("limit=5000"));
+    expect(pathTreeCalls.length).toBe(0);
+
+    // Opening the accordion should trigger the fetch.
+    openFoldersAccordion();
+
+    await waitFor(() => {
+      const after = fetchImpl.mock.calls
+        .map((c) => String(c[0]))
+        .filter((u) => u.includes("/api/notes") && u.includes("limit=5000"));
+      expect(after.length).toBeGreaterThan(0);
     });
   });
 });
