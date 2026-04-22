@@ -481,7 +481,7 @@ describe("drain — update-settings (merge-on-409 invariant)", () => {
     const out = await drain({ db, client, vaultId: "v1", blobStore: createIdbBlobStore(db) });
     expect(out.drained).toBe(1);
     expect(createNote).toHaveBeenCalledOnce();
-    const arg = createNote.mock.calls[0]?.[0] as unknown as {
+    const arg = (createNote.mock.calls as unknown as unknown[][])[0]?.[0] as {
       path: string;
       metadata: { lens: { tagRoles: { pinned: string } } };
     };
@@ -585,7 +585,7 @@ describe("drain — update-settings (merge-on-409 invariant)", () => {
     expect(out.drained).toBe(1);
     // 3 merge-retries + 1 initial = 4 conditional PATCHes, +1 forced PATCH.
     expect(updateNote.mock.calls.length).toBe(5);
-    const lastCall = updateNote.mock.calls.at(-1)! as [
+    const lastCall = (updateNote.mock.calls as unknown as unknown[][]).at(-1)! as [
       string,
       { metadata: unknown; if_updated_at?: string; force?: boolean },
     ];
