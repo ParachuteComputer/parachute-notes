@@ -3,11 +3,13 @@ import { fuzzyScore } from "./fuzzy";
 import type { RecentEntry } from "./recents";
 import { noteTitle } from "./title";
 
-// The switcher returns a heterogeneous list: commands first when a query
-// matches one, then notes by score, then a trailing tag section for pure-tag
-// jumps. Keeping all three in one ordered list (rather than separate sections
-// on the same view) keeps keyboard nav with ↑/↓/Enter trivial — the selected
-// index always points at a real entry.
+// The switcher returns a heterogeneous list. In a tag-first IA a tag is a
+// whole view — jumping to #daily is usually a stronger intent than opening a
+// single note whose title happens to contain "daily" — so matching tags
+// always lead. Commands and notes then interleave by fuzzy score, so a
+// strong command match ("new", "graph") can still beat weaker note hits, and
+// vice versa. Keeping all three in one ordered list keeps keyboard nav with
+// ↑/↓/Enter trivial — the selected index always points at a real entry.
 
 export type QuickSwitchEntry =
   | { kind: "note"; id: string; title: string; path?: string; score: number }
@@ -219,7 +221,7 @@ export function computeResults(inputs: Inputs): QuickSwitchEntry[] {
     ];
   });
 
-  return [...commandMatches, ...noteMatches, ...tagMatches]
-    .sort((a, b) => b.score - a.score)
-    .slice(0, MAX_RESULTS);
+  const sortedTags = [...tagMatches].sort((a, b) => b.score - a.score);
+  const rest = [...commandMatches, ...noteMatches].sort((a, b) => b.score - a.score);
+  return [...sortedTags, ...rest].slice(0, MAX_RESULTS);
 }

@@ -231,6 +231,13 @@ function EditorSurface({ note }: { note: Note }) {
         </div>
 
         <div className="mt-3 flex flex-col gap-2">
+          <TagEditor
+            tags={draft.tags}
+            input={tagInput}
+            onInputChange={setTagInput}
+            onAdd={addTag}
+            onRemove={removeTag}
+          />
           <label className="flex items-baseline gap-3 text-sm">
             <span className="shrink-0 text-xs uppercase tracking-wider text-fg-dim">Path</span>
             <input
@@ -245,13 +252,6 @@ function EditorSurface({ note }: { note: Note }) {
           {pathChanged ? (
             <p className="text-xs text-accent">Renaming moves the note — its id may change.</p>
           ) : null}
-          <TagEditor
-            tags={draft.tags}
-            input={tagInput}
-            onInputChange={setTagInput}
-            onAdd={addTag}
-            onRemove={removeTag}
-          />
         </div>
       </header>
 

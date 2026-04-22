@@ -63,14 +63,29 @@ describe("computeResults", () => {
     expect(results[0]?.kind === "note" && results[0].id).toBe("titleWins");
   });
 
-  it("includes tag matches below note matches", () => {
+  it("ranks matching tags above notes that share the query (tag-first)", () => {
     const results = computeResults({
       query: "daily",
       notes: [note("n1", { path: "Daily.md" })],
       tags: [{ name: "daily", count: 12 }],
       recents: [],
     });
-    expect(results.some((r) => r.kind === "tag" && r.name === "daily")).toBe(true);
+    const firstNonCommand = results.find((r) => r.kind !== "command");
+    expect(firstNonCommand?.kind).toBe("tag");
+    expect(firstNonCommand?.kind === "tag" && firstNonCommand.name).toBe("daily");
+  });
+
+  it("interleaves commands and notes by score below the tag band", () => {
+    const results = computeResults({
+      query: "graph",
+      notes: [note("n1", { path: "graphs.md" })],
+      tags: [{ name: "graph", count: 4 }],
+      recents: [],
+    });
+    expect(results[0]?.kind).toBe("tag");
+    const belowTags = results.filter((r) => r.kind !== "tag");
+    expect(belowTags.some((r) => r.kind === "command" && r.id === "graph")).toBe(true);
+    expect(belowTags.some((r) => r.kind === "note")).toBe(true);
   });
 
   it("in command mode (> prefix) surfaces only commands", () => {

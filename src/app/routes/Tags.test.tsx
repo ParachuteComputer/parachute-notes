@@ -222,6 +222,25 @@ describe("Tags route", () => {
     expect(screen.getByRole("button", { name: /merge into/i })).toBeEnabled();
   });
 
+  it("pin toggle writes the per-vault pinned-tags list to localStorage", async () => {
+    installFetch({ tags: [{ name: "daily", count: 4 }] });
+    render(
+      <Wrap>
+        <Tags />
+      </Wrap>,
+    );
+    const pin = await screen.findByRole("button", { name: /pin tag daily/i });
+    expect(pin).toHaveTextContent(/pin/i);
+    fireEvent.click(pin);
+    const unpin = await screen.findByRole("button", { name: /unpin tag daily/i });
+    expect(unpin).toHaveTextContent(/pinned/i);
+    const stored = JSON.parse(localStorage.getItem("lens:pinned-tags:v1") ?? "[]");
+    expect(stored).toEqual(["daily"]);
+    fireEvent.click(unpin);
+    await screen.findByRole("button", { name: /pin tag daily/i });
+    expect(JSON.parse(localStorage.getItem("lens:pinned-tags:v1") ?? "[]")).toEqual([]);
+  });
+
   it("shows the filtered-empty state when filter matches nothing", async () => {
     installFetch({ tags: [{ name: "canon", count: 1 }] });
     render(

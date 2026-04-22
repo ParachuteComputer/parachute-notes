@@ -1,5 +1,5 @@
 import { TagRenameDialog } from "@/components/TagRenameDialog";
-import { useMergeTags, useRenameTag, useTags, useVaultStore } from "@/lib/vault";
+import { useMergeTags, usePinnedTags, useRenameTag, useTags, useVaultStore } from "@/lib/vault";
 import { VaultAuthError } from "@/lib/vault/client";
 import type { TagSummary } from "@/lib/vault/types";
 import { useSync } from "@/providers/SyncProvider";
@@ -12,6 +12,7 @@ export function Tags() {
   const activeVault = useVaultStore((s) => s.getActiveVault());
   const tags = useTags();
   const { isOnline } = useSync();
+  const { isPinned, togglePin } = usePinnedTags(activeVault?.id ?? null);
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState<SortMode>("count");
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -113,6 +114,8 @@ export function Tags() {
               selected={selected.has(t.name)}
               onToggle={() => toggleSelected(t.name)}
               onRename={() => setRenameTarget(t.name)}
+              pinned={isPinned(t.name)}
+              onTogglePin={() => togglePin(t.name)}
               offline={offline}
             />
           ))}
@@ -165,12 +168,16 @@ function TagRow({
   selected,
   onToggle,
   onRename,
+  pinned,
+  onTogglePin,
   offline,
 }: {
   tag: TagSummary;
   selected: boolean;
   onToggle(): void;
   onRename(): void;
+  pinned: boolean;
+  onTogglePin(): void;
   offline: boolean;
 }) {
   return (
@@ -189,6 +196,20 @@ function TagRow({
         <span className="font-mono">#{tag.name}</span>
         <span className="text-xs text-fg-dim">{tag.count}</span>
       </Link>
+      <button
+        type="button"
+        onClick={onTogglePin}
+        className={
+          pinned
+            ? "text-xs font-medium text-accent hover:text-accent-hover"
+            : "text-xs text-fg-muted hover:text-accent"
+        }
+        aria-label={pinned ? `Unpin tag ${tag.name}` : `Pin tag ${tag.name}`}
+        aria-pressed={pinned}
+        title={pinned ? "Pinned to home strip — click to unpin" : "Pin to home strip"}
+      >
+        {pinned ? "★ Pinned" : "☆ Pin"}
+      </button>
       <button
         type="button"
         onClick={onRename}
