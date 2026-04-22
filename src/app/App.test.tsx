@@ -68,6 +68,20 @@ describe("App", () => {
     expect(window.location.pathname).toMatch(/^\/lens\/?$/);
   });
 
+  it("clamps horizontal overflow at the shell so a stray wide descendant can't scroll the viewport", () => {
+    render(<App />);
+    // Belt-and-suspenders against mobile overflow regressions. If any
+    // descendant (a long unbreakable path, a rogue min-width, a missing
+    // min-w-0 in a deep flex chain) ever exceeds the viewport width, the
+    // shell clips it to the viewport instead of turning the whole page into
+    // a horizontal scroller. jsdom doesn't compute layout, so this is a
+    // class-presence check, not a measured scrollWidth assertion — the
+    // manual-testing steps live in the PR body.
+    const shell = screen.getByRole("link", { name: /parachute lens/i }).closest("div.min-h-dvh");
+    expect(shell).not.toBeNull();
+    expect(shell?.className).toMatch(/\boverflow-x-hidden\b/);
+  });
+
   it("static route /settings wins over the dynamic /:id deep-link shim", () => {
     useVaultStore.setState({
       vaults: {

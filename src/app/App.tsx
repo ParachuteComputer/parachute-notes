@@ -48,7 +48,7 @@ export function App() {
     <QueryProvider>
       <SyncProvider>
         <BrowserRouter basename={import.meta.env.BASE_URL.replace(/\/$/, "") || undefined}>
-          <div className="min-h-dvh bg-bg text-fg pb-16 md:pb-0">
+          <div className="min-h-dvh overflow-x-hidden bg-bg text-fg pb-16 md:pb-0">
             <Toaster />
             <UpdateBanner />
             <Header />
