@@ -272,7 +272,7 @@ export function MemoCapture({ embedded = false }: { embedded?: boolean } = {}) {
                 <button
                   type="button"
                   onClick={pauseRecording}
-                  className="rounded-md border border-border bg-bg px-4 py-2 text-sm text-fg-muted hover:text-accent"
+                  className="min-h-11 rounded-md border border-border bg-bg px-4 py-2 text-sm text-fg-muted hover:text-accent"
                 >
                   Pause
                 </button>
@@ -280,7 +280,7 @@ export function MemoCapture({ embedded = false }: { embedded?: boolean } = {}) {
                 <button
                   type="button"
                   onClick={resumeRecording}
-                  className="rounded-md border border-border bg-bg px-4 py-2 text-sm text-fg-muted hover:text-accent"
+                  className="min-h-11 rounded-md border border-border bg-bg px-4 py-2 text-sm text-fg-muted hover:text-accent"
                 >
                   Resume
                 </button>
@@ -288,14 +288,14 @@ export function MemoCapture({ embedded = false }: { embedded?: boolean } = {}) {
               <button
                 type="button"
                 onClick={stopRecording}
-                className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover"
+                className="min-h-11 rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover"
               >
                 Stop
               </button>
               <button
                 type="button"
                 onClick={discard}
-                className="rounded-md border border-border bg-bg px-4 py-2 text-sm text-fg-dim hover:text-red-400"
+                className="min-h-11 rounded-md border border-border bg-bg px-4 py-2 text-sm text-fg-dim hover:text-red-400"
               >
                 Cancel
               </button>
@@ -315,14 +315,14 @@ export function MemoCapture({ embedded = false }: { embedded?: boolean } = {}) {
               <button
                 type="button"
                 onClick={discard}
-                className="rounded-md border border-border bg-bg px-4 py-2 text-sm text-fg-muted hover:text-red-400"
+                className="min-h-11 rounded-md border border-border bg-bg px-4 py-2 text-sm text-fg-muted hover:text-red-400"
               >
                 Discard &amp; re-record
               </button>
               <button
                 type="button"
                 onClick={save}
-                className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover"
+                className="min-h-11 rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover"
               >
                 Save memo
               </button>

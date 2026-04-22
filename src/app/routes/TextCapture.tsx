@@ -161,7 +161,7 @@ export function TextCapture() {
           type="button"
           onClick={() => void save()}
           disabled={!isDirty}
-          className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-40"
+          className="min-h-11 rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-40"
         >
           Capture
         </button>

@@ -233,7 +233,7 @@ export function Notes({ preset }: { preset?: NotesPreset } = {}) {
           </button>
           <Link
             to="/new"
-            className="rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-white hover:bg-accent-hover"
+            className="min-h-11 rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-white hover:bg-accent-hover"
           >
             New note
           </Link>
@@ -358,7 +358,7 @@ export function Notes({ preset }: { preset?: NotesPreset } = {}) {
                 type="button"
                 disabled={!hasPrev}
                 onClick={() => setOffset((o) => Math.max(0, o - DEFAULT_PAGE_SIZE))}
-                className="rounded-md border border-border px-3 py-1.5 text-sm text-fg-muted enabled:hover:text-accent disabled:opacity-40"
+                className="min-h-11 rounded-md border border-border px-3 py-1.5 text-sm text-fg-muted enabled:hover:text-accent disabled:opacity-40"
               >
                 Previous
               </button>
@@ -366,7 +366,7 @@ export function Notes({ preset }: { preset?: NotesPreset } = {}) {
                 type="button"
                 disabled={!hasNext}
                 onClick={() => setOffset((o) => o + DEFAULT_PAGE_SIZE)}
-                className="rounded-md border border-border px-3 py-1.5 text-sm text-fg-muted enabled:hover:text-accent disabled:opacity-40"
+                className="min-h-11 rounded-md border border-border px-3 py-1.5 text-sm text-fg-muted enabled:hover:text-accent disabled:opacity-40"
               >
                 Next
               </button>
@@ -475,7 +475,7 @@ function SaveViewDialog({
           <button
             type="button"
             onClick={onCancel}
-            className="rounded-md border border-border px-3 py-1.5 text-sm text-fg-muted hover:text-accent"
+            className="min-h-11 rounded-md border border-border px-3 py-1.5 text-sm text-fg-muted hover:text-accent"
           >
             Cancel
           </button>
@@ -483,7 +483,7 @@ function SaveViewDialog({
             type="button"
             onClick={() => canSave && onSave(trimmed)}
             disabled={!canSave}
-            className="rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-40"
+            className="min-h-11 rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-40"
           >
             {isSaving ? "Saving…" : "Save"}
           </button>

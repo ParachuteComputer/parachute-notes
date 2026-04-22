@@ -64,7 +64,7 @@ function TabButton({
       role="tab"
       aria-selected={active}
       onClick={onClick}
-      className={`rounded-full px-4 py-1.5 transition ${
+      className={`min-h-11 rounded-full px-4 py-1.5 transition ${
         active ? "bg-accent text-white" : "text-fg-muted hover:text-accent"
       }`}
     >

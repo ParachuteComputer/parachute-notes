@@ -74,8 +74,8 @@ export function PinArchiveButtons({ note, keyboard = false }: Props) {
         title={isPinned ? `Unpin (${roles.pinned})` : `Pin as #${roles.pinned} (P)`}
         className={
           isPinned
-            ? "rounded-md border border-accent/60 bg-accent/10 px-3 py-1.5 text-sm text-accent hover:bg-accent/20 disabled:opacity-40"
-            : "rounded-md border border-border bg-card px-3 py-1.5 text-sm text-fg-muted hover:text-accent disabled:opacity-40"
+            ? "min-h-11 rounded-md border border-accent/60 bg-accent/10 px-3 py-1.5 text-sm text-accent hover:bg-accent/20 disabled:opacity-40"
+            : "min-h-11 rounded-md border border-border bg-card px-3 py-1.5 text-sm text-fg-muted hover:text-accent disabled:opacity-40"
         }
       >
         {isPinned ? "★ Pinned" : "☆ Pin"}
@@ -88,8 +88,8 @@ export function PinArchiveButtons({ note, keyboard = false }: Props) {
         title={isArchived ? `Unarchive (${roles.archived})` : `Archive as #${roles.archived} (A)`}
         className={
           isArchived
-            ? "rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-1.5 text-sm text-amber-500 hover:bg-amber-500/20 disabled:opacity-40"
-            : "rounded-md border border-border bg-card px-3 py-1.5 text-sm text-fg-muted hover:text-accent disabled:opacity-40"
+            ? "min-h-11 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-1.5 text-sm text-amber-500 hover:bg-amber-500/20 disabled:opacity-40"
+            : "min-h-11 rounded-md border border-border bg-card px-3 py-1.5 text-sm text-fg-muted hover:text-accent disabled:opacity-40"
         }
       >
         {isArchived ? "Archived" : "Archive"}

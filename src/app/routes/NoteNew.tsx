@@ -147,7 +147,7 @@ export function NoteNew() {
 
       <article>
         <header className="mb-4 border-b border-border pb-4">
-          <div className="flex items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-2 text-sm">
               <span className="text-xs uppercase tracking-wider text-fg-dim">New note</span>
             </div>
@@ -155,7 +155,7 @@ export function NoteNew() {
               <button
                 type="button"
                 onClick={handleCancel}
-                className="rounded-md border border-border bg-card px-3 py-1.5 text-sm text-fg-muted hover:text-accent"
+                className="min-h-11 rounded-md border border-border bg-card px-3 py-1.5 text-sm text-fg-muted hover:text-accent"
               >
                 Cancel
               </button>
@@ -163,7 +163,7 @@ export function NoteNew() {
                 type="button"
                 onClick={handleCreate}
                 disabled={!isValid || mutation.isPending}
-                className="rounded-md bg-accent px-4 py-1.5 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-40"
+                className="min-h-11 rounded-md bg-accent px-4 py-1.5 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-40"
                 title="Create (⌘S)"
               >
                 {mutation.isPending ? "Creating…" : "Create"}

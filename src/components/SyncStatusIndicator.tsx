@@ -56,7 +56,7 @@ export function SyncStatusIndicator() {
         aria-label={`Sync status: ${label}${badge ? `, ${badge} pending` : ""}`}
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-1.5 rounded-md border border-border bg-card px-2 py-1.5 text-sm text-fg-muted hover:text-accent"
+        className="flex min-h-11 min-w-11 items-center justify-center gap-1.5 rounded-md border border-border bg-card px-2 py-1.5 text-sm text-fg-muted hover:text-accent"
       >
         <Dot tone={tone} />
         <span className="hidden text-xs sm:inline">{label}</span>

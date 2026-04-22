@@ -184,7 +184,7 @@ function EditorSurface({ note }: { note: Note }) {
   return (
     <article>
       <header className="mb-4 border-b border-border pb-4">
-        <div className="flex items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2 text-sm">
             <span className="text-xs uppercase tracking-wider text-fg-dim">Editing</span>
             {isDirty ? (
@@ -207,14 +207,14 @@ function EditorSurface({ note }: { note: Note }) {
               type="button"
               onClick={handleRevert}
               disabled={!isDirty || mutation.isPending}
-              className="rounded-md border border-border bg-card px-3 py-1.5 text-sm text-fg-muted hover:text-accent disabled:opacity-40"
+              className="min-h-11 rounded-md border border-border bg-card px-3 py-1.5 text-sm text-fg-muted hover:text-accent disabled:opacity-40"
             >
               Revert
             </button>
             <button
               type="button"
               onClick={handleCancel}
-              className="rounded-md border border-border bg-card px-3 py-1.5 text-sm text-fg-muted hover:text-accent"
+              className="min-h-11 rounded-md border border-border bg-card px-3 py-1.5 text-sm text-fg-muted hover:text-accent"
             >
               Cancel
             </button>
@@ -222,7 +222,7 @@ function EditorSurface({ note }: { note: Note }) {
               type="button"
               onClick={handleSave}
               disabled={!isDirty || mutation.isPending}
-              className="rounded-md bg-accent px-4 py-1.5 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-40"
+              className="min-h-11 rounded-md bg-accent px-4 py-1.5 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-40"
               title="Save (⌘S)"
             >
               {mutation.isPending ? "Saving…" : "Save"}

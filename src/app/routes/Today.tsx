@@ -53,7 +53,7 @@ export function Today() {
           <p className="text-xs uppercase tracking-wider text-fg-dim">{isToday ? "Today" : "On"}</p>
           <h1 className="font-serif text-3xl tracking-tight">{formatLongDate(targetKey)}</h1>
         </div>
-        <div className="flex items-center gap-2 text-sm">
+        <div className="flex flex-wrap items-center gap-2 text-sm">
           <Link
             to={`/today?date=${prev}`}
             className="rounded-md border border-border bg-card px-3 py-1.5 text-fg-muted hover:text-accent"

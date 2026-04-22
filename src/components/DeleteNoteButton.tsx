@@ -21,7 +21,7 @@ export function DeleteNoteButton({ note, className, label = "Delete" }: Props) {
         onClick={() => setOpen(true)}
         className={
           className ??
-          "rounded-md border border-red-500/40 bg-transparent px-3 py-1.5 text-sm text-red-400 hover:bg-red-500/10"
+          "min-h-11 rounded-md border border-red-500/40 bg-transparent px-3 py-1.5 text-sm text-red-400 hover:bg-red-500/10"
         }
         title="Delete this note"
       >
@@ -118,7 +118,7 @@ function ConfirmDeleteDialog({ note, onClose }: { note: Note; onClose(): void })
           <button
             type="button"
             onClick={onClose}
-            className="rounded-md border border-border bg-card px-3 py-1.5 text-sm text-fg-muted hover:text-fg"
+            className="min-h-11 rounded-md border border-border bg-card px-3 py-1.5 text-sm text-fg-muted hover:text-fg"
           >
             Cancel
           </button>
@@ -126,7 +126,7 @@ function ConfirmDeleteDialog({ note, onClose }: { note: Note; onClose(): void })
             type="button"
             onClick={handleConfirm}
             disabled={!canConfirm}
-            className="rounded-md bg-red-500 px-4 py-1.5 text-sm font-medium text-white hover:bg-red-600 disabled:opacity-40"
+            className="min-h-11 rounded-md bg-red-500 px-4 py-1.5 text-sm font-medium text-white hover:bg-red-600 disabled:opacity-40"
           >
             {mutation.isPending ? "Deleting…" : "Delete permanently"}
           </button>

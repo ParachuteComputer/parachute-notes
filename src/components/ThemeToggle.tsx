@@ -31,7 +31,7 @@ export function ThemeToggle() {
       onClick={cycle}
       aria-label={`Theme: ${label}. Click to cycle.`}
       title={`Theme: ${label}`}
-      className="rounded-md border border-border bg-card px-2 py-1.5 text-sm text-fg-muted hover:text-accent focus-visible:outline-2 focus-visible:outline-accent"
+      className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-md border border-border bg-card px-2 py-1.5 text-sm text-fg-muted hover:text-accent focus-visible:outline-2 focus-visible:outline-accent"
     >
       <ThemeIcon theme={theme} />
     </button>

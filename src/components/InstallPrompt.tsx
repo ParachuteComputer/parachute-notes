@@ -46,7 +46,7 @@ export function InstallPrompt() {
       <button
         type="button"
         onClick={handleInstall}
-        className="rounded-md border border-border bg-card px-3 py-1.5 text-sm text-fg-muted hover:text-accent focus-visible:outline-2 focus-visible:outline-accent"
+        className="min-h-11 rounded-md border border-border bg-card px-3 py-1.5 text-sm text-fg-muted hover:text-accent focus-visible:outline-2 focus-visible:outline-accent"
       >
         Install app
       </button>
@@ -70,7 +70,7 @@ export function InstallPrompt() {
             <button
               type="button"
               onClick={() => setIosHintOpen(false)}
-              className="rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-white hover:bg-accent-hover"
+              className="min-h-11 rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-white hover:bg-accent-hover"
             >
               Got it
             </button>

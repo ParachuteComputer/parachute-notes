@@ -32,7 +32,7 @@ export function Vaults() {
               <li key={vault.id} className="rounded-lg border border-border bg-card p-4">
                 <div className="flex items-center justify-between gap-4">
                   <div className="min-w-0">
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                       <span className="font-serif text-lg text-fg">{vault.name}</span>
                       {isActive ? (
                         <span className="rounded bg-accent/10 px-2 py-0.5 text-xs text-accent">

@@ -80,7 +80,7 @@ function NoteBody({ note }: { note: Note }) {
           <div className="mt-4 flex flex-wrap items-center gap-2">
             <Link
               to={`/n/${encodeURIComponent(note.id)}/edit`}
-              className="rounded-md border border-border bg-card px-3 py-1.5 text-sm text-fg-muted hover:text-accent"
+              className="min-h-11 rounded-md border border-border bg-card px-3 py-1.5 text-sm text-fg-muted hover:text-accent"
             >
               Edit
             </Link>

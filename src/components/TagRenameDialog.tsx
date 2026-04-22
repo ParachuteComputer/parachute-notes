@@ -218,7 +218,7 @@ export function TagRenameDialog({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-md border border-border bg-card px-3 py-1.5 text-sm text-fg-muted hover:text-fg"
+            className="min-h-11 rounded-md border border-border bg-card px-3 py-1.5 text-sm text-fg-muted hover:text-fg"
           >
             Cancel
           </button>
@@ -226,7 +226,7 @@ export function TagRenameDialog({
             type="button"
             onClick={() => void handleConfirm()}
             disabled={!canConfirm}
-            className="rounded-md bg-accent px-4 py-1.5 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-40"
+            className="min-h-11 rounded-md bg-accent px-4 py-1.5 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-40"
           >
             {pending
               ? mode === "rename"

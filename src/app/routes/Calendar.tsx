@@ -59,7 +59,7 @@ export function Calendar() {
             {formatLongMonth(parsed.year, parsed.month)}
           </h1>
         </div>
-        <div className="flex items-center gap-2 text-sm">
+        <div className="flex flex-wrap items-center gap-2 text-sm">
           <Link
             to={`/calendar?month=${prevKey}`}
             className="rounded-md border border-border bg-card px-3 py-1.5 text-fg-muted hover:text-accent"

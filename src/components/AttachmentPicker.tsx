@@ -19,7 +19,7 @@ export function AttachmentPicker({ onPickFiles, label = "Attach files…", class
         onClick={() => inputRef.current?.click()}
         className={
           className ??
-          "rounded-md border border-border bg-card px-3 py-1.5 text-sm text-fg-muted hover:text-accent"
+          "min-h-11 rounded-md border border-border bg-card px-3 py-1.5 text-sm text-fg-muted hover:text-accent"
         }
         title="Upload an attachment"
       >
