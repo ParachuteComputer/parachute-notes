@@ -1,4 +1,5 @@
 import type { CreateNotePayload, UpdateNotePayload } from "@/lib/vault/client";
+import type { LensSettingsPatch } from "@/lib/vault/settings";
 
 // Shape of every row in the `pending` object store. Mutations flow through here
 // FIFO by autoincrement `seq`. `targetId` may be a local-only ID that needs
@@ -6,6 +7,7 @@ import type { CreateNotePayload, UpdateNotePayload } from "@/lib/vault/client";
 export type PendingKind =
   | "create-note"
   | "update-note"
+  | "update-settings"
   | "delete-note"
   | "upload-attachment"
   | "link-attachment"
@@ -29,6 +31,22 @@ export interface PendingUpdateNote {
 export interface PendingDeleteNote {
   kind: "delete-note";
   targetId: string;
+}
+
+// Settings-note update. Carries the ORIGINAL patch (not a pre-merged full
+// payload) so the drain handler can refetch the note, apply the patch onto
+// whatever the server currently has, and PATCH with a fresh if_updated_at.
+// A forced PATCH is the last-resort fallback after merge-retries are
+// exhausted — otherwise we'd silently clobber another device's write that
+// landed while we were offline.
+export interface PendingUpdateSettings {
+  kind: "update-settings";
+  notePath: string;
+  patch: LensSettingsPatch;
+  // The serverUpdatedAt we last observed when the row was enqueued. Used as
+  // the initial `if_updated_at`; stale by the time the drain runs, but the
+  // drain refetches to recover a fresh baseline regardless.
+  baselineUpdatedAt: string | null;
 }
 
 export interface PendingUploadAttachment {
@@ -62,6 +80,7 @@ export interface PendingDeleteAttachment {
 export type PendingPayload =
   | PendingCreateNote
   | PendingUpdateNote
+  | PendingUpdateSettings
   | PendingDeleteNote
   | PendingUploadAttachment
   | PendingLinkAttachment

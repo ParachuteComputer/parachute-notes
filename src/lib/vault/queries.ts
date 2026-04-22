@@ -179,11 +179,11 @@ export function useNote(id: string | undefined) {
 // lands.
 const OFFLINE_FALLBACK_MS = 8_000;
 
-function isOffline(): boolean {
+export function isOffline(): boolean {
   return typeof navigator !== "undefined" && navigator.onLine === false;
 }
 
-async function withOfflineFallback<T>(
+export async function withOfflineFallback<T>(
   online: (signal: AbortSignal) => Promise<T>,
   enqueueFallback: (() => Promise<T>) | null,
 ): Promise<T> {

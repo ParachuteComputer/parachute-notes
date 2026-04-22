@@ -203,6 +203,8 @@ export function describeMutation(m: PendingPayload): string {
       return `Create note (${m.payload.path ?? "untitled"})`;
     case "update-note":
       return `Update note ${m.targetId}`;
+    case "update-settings":
+      return `Update settings (${m.notePath})`;
     case "delete-note":
       return `Delete note ${m.targetId}`;
     case "upload-attachment":

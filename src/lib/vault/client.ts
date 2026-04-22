@@ -88,6 +88,11 @@ export interface UpdateNotePayload {
   metadata?: Record<string, unknown>;
   tags?: { add?: string[]; remove?: string[] };
   if_updated_at?: string;
+  // The vault's PATCH /api/notes/:idOrPath enforces optimistic concurrency by
+  // default: either `if_updated_at` or `force: true` is required. `force` is
+  // the opt-out for writes where we genuinely don't have a baseline (e.g.
+  // offline-queued settings writes that drain long after we last fetched).
+  force?: boolean;
 }
 
 export interface CreateNotePayload {

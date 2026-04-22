@@ -451,3 +451,145 @@ describe("retryRow / discardRow / clearPendingForVault", () => {
     expect(await countPending(db, "v2")).toBe(1);
   });
 });
+
+describe("drain — update-settings (merge-on-409 invariant)", () => {
+  let db: LensDB;
+  beforeEach(async () => {
+    db = await freshDb();
+  });
+  afterEach(() => db.close());
+
+  const settingsPath = ".parachute/lens/settings";
+
+  it("POSTs when the settings note doesn't exist", async () => {
+    const createNote = vi.fn(async () => ({ id: "srv", createdAt: "t1" }) as Note);
+    const getNote = vi.fn(async () => {
+      throw new VaultNotFoundError();
+    });
+    const client = makeClient({ createNote, getNote });
+
+    await enqueue(
+      db,
+      {
+        kind: "update-settings",
+        notePath: settingsPath,
+        patch: { tagRoles: { pinned: "fav" } },
+        baselineUpdatedAt: null,
+      },
+      { vaultId: "v1" },
+    );
+    const out = await drain({ db, client, vaultId: "v1", blobStore: createIdbBlobStore(db) });
+    expect(out.drained).toBe(1);
+    expect(createNote).toHaveBeenCalledOnce();
+    const arg = createNote.mock.calls[0]?.[0] as unknown as {
+      path: string;
+      metadata: { lens: { tagRoles: { pinned: string } } };
+    };
+    expect(arg.path).toBe(settingsPath);
+    expect(arg.metadata.lens.tagRoles.pinned).toBe("fav");
+  });
+
+  it("merges the patch onto the refetched server state, preserving a concurrent peer's write", async () => {
+    // Server state reflects a concurrent device's write (pinned=A-pinned).
+    // Our enqueued patch changes only `archived`. After the drain the
+    // PATCH must send a merged object that keeps A-pinned AND adds
+    // archived=B-archived — i.e. no silent clobber of the peer.
+    const getNote = vi.fn(
+      async () =>
+        ({
+          id: "srv",
+          path: settingsPath,
+          createdAt: "t0",
+          updatedAt: "t1",
+          metadata: {
+            lens: {
+              schemaVersion: 1,
+              tagRoles: {
+                pinned: "A-pinned",
+                archived: "archived",
+                captureVoice: "voice",
+                captureText: "quick",
+                view: "view",
+              },
+            },
+          },
+        }) as Note,
+    );
+    const updateNote = vi.fn(
+      async (id: string) => ({ id, createdAt: "t0", updatedAt: "t2" }) as Note,
+    );
+    const client = makeClient({ getNote, updateNote });
+
+    await enqueue(
+      db,
+      {
+        kind: "update-settings",
+        notePath: settingsPath,
+        patch: { tagRoles: { archived: "B-archived" } },
+        // Stale baseline — the drain refreshes it from the fetched note.
+        baselineUpdatedAt: "t0",
+      },
+      { vaultId: "v1" },
+    );
+
+    const out = await drain({ db, client, vaultId: "v1", blobStore: createIdbBlobStore(db) });
+
+    expect(out.drained).toBe(1);
+    expect(updateNote).toHaveBeenCalledOnce();
+    const call = updateNote.mock.calls[0] as unknown as [
+      string,
+      { metadata: { lens: { tagRoles: Record<string, string> } }; if_updated_at?: string },
+    ];
+    expect(call[1].metadata.lens.tagRoles.pinned).toBe("A-pinned");
+    expect(call[1].metadata.lens.tagRoles.archived).toBe("B-archived");
+    expect(call[1].if_updated_at).toBe("t1");
+  });
+
+  it("retries the merge+PATCH on 409 up to the limit, then falls back to force: true", async () => {
+    // Every GET returns the same note; every PATCH 409s. The drain should
+    // loop, and on the final attempt send `force: true` so the change still
+    // lands — "safest possible overwrite" rather than blind, because we
+    // merged against the most recent fetch.
+    const getNote = vi.fn(
+      async () =>
+        ({
+          id: "srv",
+          path: settingsPath,
+          createdAt: "t0",
+          updatedAt: "t1",
+          metadata: { lens: { schemaVersion: 1, tagRoles: { pinned: "p" } } },
+        }) as Note,
+    );
+    let calls = 0;
+    const updateNote = vi.fn(async () => {
+      calls += 1;
+      // Last attempt (force: true) must succeed.
+      if (calls >= 5) return { id: "srv", createdAt: "t0", updatedAt: "t2" } as Note;
+      throw new VaultConflictError({});
+    });
+    const client = makeClient({ getNote, updateNote });
+
+    await enqueue(
+      db,
+      {
+        kind: "update-settings",
+        notePath: settingsPath,
+        patch: { tagRoles: { archived: "B" } },
+        baselineUpdatedAt: "t1",
+      },
+      { vaultId: "v1" },
+    );
+
+    const out = await drain({ db, client, vaultId: "v1", blobStore: createIdbBlobStore(db) });
+
+    expect(out.drained).toBe(1);
+    // 3 merge-retries + 1 initial = 4 conditional PATCHes, +1 forced PATCH.
+    expect(updateNote.mock.calls.length).toBe(5);
+    const lastCall = updateNote.mock.calls.at(-1)! as [
+      string,
+      { metadata: unknown; if_updated_at?: string; force?: boolean },
+    ];
+    expect(lastCall[1].force).toBe(true);
+    expect(lastCall[1].if_updated_at).toBeUndefined();
+  });
+});

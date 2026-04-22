@@ -61,7 +61,7 @@ describe("Settings route", () => {
     expect(screen.queryByRole("heading", { name: /transcription/i })).not.toBeInTheDocument();
   });
 
-  it("renders tag roles with defaults and saves overrides to localStorage", async () => {
+  it("renders tag roles with defaults and saves overrides into the vault-settings cache", async () => {
     renderSettings();
     const section = screen
       .getByRole("heading", { name: /tag roles/i })
@@ -75,12 +75,17 @@ describe("Settings route", () => {
     await act(async () => {
       fireEvent.click(within(section).getByRole("button", { name: /^save$/i }));
     });
-    const stored = JSON.parse(localStorage.getItem("lens:tag-roles:dev") ?? "{}") as {
-      pinned: string;
-      archived: string;
+    // Tag roles now live in the vault settings note; localStorage is the
+    // write-through cache under the new `lens:settings:<vaultId>` key. No
+    // active client is mounted in the test, so update() takes the offline
+    // path and leaves the change pinned in the cache as a dirtyPatch.
+    const stored = JSON.parse(localStorage.getItem("lens:settings:dev") ?? "{}") as {
+      settings?: { tagRoles?: { pinned?: string; archived?: string } };
+      dirtyPatch?: { tagRoles?: { pinned?: string } } | null;
     };
-    expect(stored.pinned).toBe("starred");
-    expect(stored.archived).toBe("archived");
+    expect(stored.settings?.tagRoles?.pinned).toBe("starred");
+    expect(stored.settings?.tagRoles?.archived).toBe("archived");
+    expect(stored.dirtyPatch?.tagRoles?.pinned).toBe("starred");
   });
 
   it("renders the path-tree section and persists mode changes", async () => {
@@ -101,14 +106,34 @@ describe("Settings route", () => {
     expect(stored.mode).toBe("always");
   });
 
-  it("reset-to-defaults wipes the stored tag roles", async () => {
+  it("reset-to-defaults writes the defaults back through the cache", async () => {
+    // Seed the settings cache directly — simulates a prior non-default
+    // selection that rehydrates into the UI on mount.
     localStorage.setItem(
-      "lens:tag-roles:dev",
+      "lens:settings:dev",
       JSON.stringify({
-        pinned: "starred",
-        archived: "done",
-        captureVoice: "memo",
-        captureText: "inbox",
+        settings: {
+          schemaVersion: 1,
+          tagRoles: {
+            pinned: "starred",
+            archived: "done",
+            captureVoice: "memo",
+            captureText: "inbox",
+            view: "preset",
+          },
+        },
+        serverSettings: null,
+        serverUpdatedAt: null,
+        noteExists: false,
+        dirtyPatch: {
+          tagRoles: {
+            pinned: "starred",
+            archived: "done",
+            captureVoice: "memo",
+            captureText: "inbox",
+            view: "preset",
+          },
+        },
       }),
     );
     renderSettings();
@@ -121,7 +146,10 @@ describe("Settings route", () => {
     await act(async () => {
       fireEvent.click(within(section).getByRole("button", { name: /reset to defaults/i }));
     });
-    expect(localStorage.getItem("lens:tag-roles:dev")).toBeNull();
+    const stored = JSON.parse(localStorage.getItem("lens:settings:dev") ?? "{}") as {
+      settings?: { tagRoles?: { pinned?: string } };
+    };
+    expect(stored.settings?.tagRoles?.pinned).toBe("pinned");
     expect((within(section).getByLabelText(/pinned tag role/i) as HTMLInputElement).value).toBe(
       "pinned",
     );

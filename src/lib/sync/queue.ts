@@ -4,6 +4,11 @@ import {
   VaultConflictError,
   VaultNotFoundError,
 } from "@/lib/vault/client";
+import {
+  DEFAULT_LENS_SETTINGS,
+  applySettingsPatch,
+  extractLensSettings,
+} from "@/lib/vault/settings";
 import type { BlobStore } from "./blob-store";
 import { type LensDB, setMeta } from "./db";
 import {
@@ -188,6 +193,10 @@ async function runMutation(ctx: DrainContext, row: PendingRow): Promise<void> {
       await ctx.client.updateNote(targetId, m.payload);
       return;
     }
+    case "update-settings": {
+      await drainUpdateSettings(ctx.client, m.notePath, m.patch);
+      return;
+    }
     case "delete-note": {
       const targetId = await resolveNoteId(ctx.db, m.targetId, ctx.vaultId);
       if (!targetId) {
@@ -261,6 +270,75 @@ export async function retryRow(db: LensDB, seq: number): Promise<void> {
 // Drop a single pending row — used by "Discard" on a stashed row.
 export async function discardRow(db: LensDB, seq: number): Promise<void> {
   await db.delete("pending", seq);
+}
+
+// How many GET-merge-PATCH passes we take before resorting to a forced
+// overwrite. Three is enough to handle normal interleaving with another
+// device but low enough that a genuinely pathological conflict loop doesn't
+// starve the drain.
+const SETTINGS_MERGE_RETRIES = 3;
+
+// Drain handler for `update-settings`. We refetch the settings note, merge
+// the enqueued patch onto whatever the server currently shows, and PATCH
+// with a fresh `if_updated_at`. On 409 we loop up to SETTINGS_MERGE_RETRIES
+// times; only after that do we give up and force the write. This protects
+// the invariant that offline settings writes merge with — never silently
+// overwrite — writes made on other devices while this one was offline.
+async function drainUpdateSettings(
+  client: VaultClient,
+  notePath: string,
+  patch: import("@/lib/vault/settings").LensSettingsPatch,
+): Promise<void> {
+  for (let attempt = 0; attempt <= SETTINGS_MERGE_RETRIES; attempt++) {
+    let note: Awaited<ReturnType<VaultClient["getNote"]>> = null;
+    try {
+      note = await client.getNote(notePath);
+    } catch (err) {
+      if (!(err instanceof VaultNotFoundError)) throw err;
+    }
+
+    if (!note) {
+      // First-ever write for this vault — POST with the patch layered onto
+      // defaults. The vault returns 409 if another device beat us to create,
+      // which the outer retry loop handles by refetching.
+      try {
+        await client.createNote({
+          path: notePath,
+          content: "",
+          metadata: { lens: applySettingsPatch(DEFAULT_LENS_SETTINGS, patch) },
+        });
+        return;
+      } catch (err) {
+        if (err instanceof VaultConflictError && attempt < SETTINGS_MERGE_RETRIES) {
+          continue;
+        }
+        throw err;
+      }
+    }
+
+    const server = extractLensSettings(note);
+    const merged = applySettingsPatch(server, patch);
+    const baseline = note.updatedAt ?? note.createdAt;
+    try {
+      await client.updateNote(notePath, {
+        metadata: { lens: merged },
+        if_updated_at: baseline,
+      });
+      return;
+    } catch (err) {
+      if (err instanceof VaultConflictError && attempt < SETTINGS_MERGE_RETRIES) {
+        continue;
+      }
+      if (err instanceof VaultConflictError) {
+        // Exhausted polite retries. Force the write — merged against the
+        // latest server state we fetched, so this is still the "safest
+        // possible overwrite" rather than a blind one.
+        await client.updateNote(notePath, { metadata: { lens: merged }, force: true });
+        return;
+      }
+      throw err;
+    }
+  }
 }
 
 // Nuke every pending row for `vaultId`. Destructive escape hatch when a row

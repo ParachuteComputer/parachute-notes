@@ -1,13 +1,18 @@
-import { useCallback, useEffect, useState } from "react";
-
 // Per-vault "tag role" settings. Features like capture, pin, archive want to
 // apply a specific tag — but hardcoding tag names pushes one vault's
 // conventions onto every vault. Each role holds a customizable tag name; the
 // defaults preserve sensible behavior for a fresh vault.
 //
-// Stored per-vault in localStorage, analogous to scribe settings. Remapping a
-// role never retags existing notes — the role just points at the new tag
-// going forward.
+// Storage: starting in v0.3.0-rc.2, tag roles live inside the vault settings
+// note (`.parachute/lens/settings`) so they sync across the same user's
+// devices. The legacy per-vault localStorage key `lens:tag-roles:<vaultId>`
+// is still read on first boot as a migration seed; leave it in place one
+// release cycle so a downgrade doesn't lose the data. The `useTagRoles` hook
+// now lives in `./settings.ts` (delegating to `useVaultSettings`) — keeping it
+// out of this file breaks a tag-roles → settings → tag-roles import cycle.
+//
+// Remapping a role never retags existing notes — the role just points at the
+// new tag going forward.
 export interface TagRoles {
   pinned: string;
   archived: string;
@@ -39,31 +44,35 @@ function normalizeTag(name: string | undefined, fallback: string): string {
   return trimmed.length > 0 ? trimmed : fallback;
 }
 
+// Accepts any shape (including a partial object from the vault settings note)
+// and returns a fully-populated TagRoles. Shared between the legacy
+// localStorage path and the settings-note extraction.
+export function normalizeTagRoles(raw: unknown): TagRoles {
+  if (!raw || typeof raw !== "object") return { ...DEFAULT_TAG_ROLES };
+  const r = raw as Partial<TagRoles>;
+  return {
+    pinned: normalizeTag(r.pinned, DEFAULT_TAG_ROLES.pinned),
+    archived: normalizeTag(r.archived, DEFAULT_TAG_ROLES.archived),
+    captureVoice: normalizeTag(r.captureVoice, DEFAULT_TAG_ROLES.captureVoice),
+    captureText: normalizeTag(r.captureText, DEFAULT_TAG_ROLES.captureText),
+    view: normalizeTag(r.view, DEFAULT_TAG_ROLES.view),
+  };
+}
+
+// Legacy localStorage helpers — retained as a migration seed for the vault
+// settings note. Kept in-tree one release cycle; remove in rc.3+.
 export function loadTagRoles(vaultId: string): TagRoles {
   try {
     const raw = localStorage.getItem(keyFor(vaultId));
     if (!raw) return { ...DEFAULT_TAG_ROLES };
-    const parsed = JSON.parse(raw) as Partial<TagRoles>;
-    return {
-      pinned: normalizeTag(parsed.pinned, DEFAULT_TAG_ROLES.pinned),
-      archived: normalizeTag(parsed.archived, DEFAULT_TAG_ROLES.archived),
-      captureVoice: normalizeTag(parsed.captureVoice, DEFAULT_TAG_ROLES.captureVoice),
-      captureText: normalizeTag(parsed.captureText, DEFAULT_TAG_ROLES.captureText),
-      view: normalizeTag(parsed.view, DEFAULT_TAG_ROLES.view),
-    };
+    return normalizeTagRoles(JSON.parse(raw));
   } catch {
     return { ...DEFAULT_TAG_ROLES };
   }
 }
 
 export function saveTagRoles(vaultId: string, roles: TagRoles): void {
-  const normalized: TagRoles = {
-    pinned: normalizeTag(roles.pinned, DEFAULT_TAG_ROLES.pinned),
-    archived: normalizeTag(roles.archived, DEFAULT_TAG_ROLES.archived),
-    captureVoice: normalizeTag(roles.captureVoice, DEFAULT_TAG_ROLES.captureVoice),
-    captureText: normalizeTag(roles.captureText, DEFAULT_TAG_ROLES.captureText),
-    view: normalizeTag(roles.view, DEFAULT_TAG_ROLES.view),
-  };
+  const normalized = normalizeTagRoles(roles);
   try {
     localStorage.setItem(keyFor(vaultId), JSON.stringify(normalized));
   } catch {
@@ -77,36 +86,4 @@ export function deleteTagRoles(vaultId: string): void {
   } catch {
     // storage unavailable — best-effort only
   }
-}
-
-// Re-reads on mount and on vaultId change. `setRoles(null)` resets to defaults.
-// Returns defaults (not null) when nothing is stored so call sites can read a
-// role tag without null-checks.
-export function useTagRoles(vaultId: string | null): {
-  roles: TagRoles;
-  setRoles: (next: TagRoles | null) => void;
-} {
-  const [roles, setState] = useState<TagRoles>(() =>
-    vaultId ? loadTagRoles(vaultId) : { ...DEFAULT_TAG_ROLES },
-  );
-
-  useEffect(() => {
-    setState(vaultId ? loadTagRoles(vaultId) : { ...DEFAULT_TAG_ROLES });
-  }, [vaultId]);
-
-  const setRoles = useCallback(
-    (next: TagRoles | null) => {
-      if (!vaultId) return;
-      if (next === null) {
-        deleteTagRoles(vaultId);
-        setState({ ...DEFAULT_TAG_ROLES });
-      } else {
-        saveTagRoles(vaultId, next);
-        setState(loadTagRoles(vaultId));
-      }
-    },
-    [vaultId],
-  );
-
-  return { roles, setRoles };
 }
