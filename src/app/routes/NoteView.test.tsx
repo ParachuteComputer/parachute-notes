@@ -114,7 +114,7 @@ describe("NoteView route", () => {
     expect(screen.getByText("Teacher and builder.")).toBeInTheDocument();
     expect(screen.getByText("Canon note on Aaron.")).toBeInTheDocument();
     // Tag chip links to the filtered list
-    const tagChip = screen.getByRole("link", { name: "canon" });
+    const tagChip = screen.getByRole("link", { name: "#canon" });
     expect(tagChip).toHaveAttribute("href", "/?tag=canon");
     // Back link to / is present
     expect(screen.getByRole("link", { name: /all notes/i })).toBeInTheDocument();

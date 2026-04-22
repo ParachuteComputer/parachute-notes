@@ -19,6 +19,7 @@ import {
   isFilteringActive,
   useNotes,
   useNotesForPathTree,
+  usePinnedTags,
   useTagRoles,
   useTags,
   useUpdateNote,
@@ -46,6 +47,7 @@ const PRESET_SUBTITLES: Partial<Record<NotesPreset, string>> = {
 export function Notes({ preset }: { preset?: NotesPreset } = {}) {
   const activeVault = useVaultStore((s) => s.getActiveVault());
   const { roles } = useTagRoles(activeVault?.id ?? null);
+  const { pinnedTags } = usePinnedTags(activeVault?.id ?? null);
   const [searchParams, setSearchParams] = useSearchParams();
 
   // Hydrate filter state from URL on mount and when the URL changes
@@ -239,6 +241,18 @@ export function Notes({ preset }: { preset?: NotesPreset } = {}) {
           </Link>
         </div>
       </header>
+
+      {!preset && pinnedTags.length > 0 ? (
+        <PinnedTagsStrip
+          pinnedTags={pinnedTags}
+          tagCounts={tags.data ?? []}
+          selected={selectedTags}
+          onPick={(name) => {
+            setPathPrefix("");
+            setSelectedTags((cur) => (cur.length === 1 && cur[0] === name ? [] : [name]));
+          }}
+        />
+      ) : null}
 
       <div className={preset ? "" : "grid gap-6 md:grid-cols-[14rem_1fr]"}>
         {!preset ? (
@@ -526,20 +540,20 @@ function NoteRow({
             </span>
             <span className="shrink-0 text-xs text-fg-dim">{relativeTime(stamp)}</span>
           </div>
-          {note.preview ? (
-            <p className="mt-1 truncate text-sm text-fg-muted">{note.preview}</p>
-          ) : null}
           {note.tags && note.tags.length > 0 ? (
-            <div className="mt-2 flex flex-wrap gap-1.5">
+            <div className="mt-1.5 flex flex-wrap gap-1.5">
               {note.tags.map((t) => (
                 <span
                   key={t}
-                  className="rounded-full border border-border bg-bg/60 px-2 py-0.5 text-xs text-fg-dim"
+                  className="rounded-full border border-accent/30 bg-accent/10 px-2 py-0.5 text-xs text-accent"
                 >
-                  {t}
+                  #{t}
                 </span>
               ))}
             </div>
+          ) : null}
+          {note.preview ? (
+            <p className="mt-1.5 truncate text-sm text-fg-muted">{note.preview}</p>
           ) : null}
         </Link>
         {quickTagSuggestions ? (
@@ -667,6 +681,48 @@ function QuickTagControl({
           ))}
         </ul>
       ) : null}
+    </div>
+  );
+}
+
+function PinnedTagsStrip({
+  pinnedTags,
+  tagCounts,
+  selected,
+  onPick,
+}: {
+  pinnedTags: string[];
+  tagCounts: TagSummary[];
+  selected: string[];
+  onPick: (name: string) => void;
+}) {
+  const countFor = (name: string) =>
+    tagCounts.find((t) => t.name.toLowerCase() === name.toLowerCase())?.count;
+  return (
+    <div className="mb-6 flex flex-wrap items-center gap-2">
+      <span className="text-xs uppercase tracking-wider text-fg-dim">Pinned tags</span>
+      {pinnedTags.map((name) => {
+        const active = selected.length === 1 && selected[0] === name;
+        const count = countFor(name);
+        return (
+          <button
+            key={name}
+            type="button"
+            onClick={() => onPick(name)}
+            className={
+              active
+                ? "inline-flex items-center gap-1 rounded-full border border-accent bg-accent px-2.5 py-1 text-xs font-medium text-white"
+                : "inline-flex items-center gap-1 rounded-full border border-accent/40 bg-accent/10 px-2.5 py-1 text-xs text-accent hover:border-accent hover:bg-accent/20"
+            }
+            aria-pressed={active}
+          >
+            <span>#{name}</span>
+            {count !== undefined ? (
+              <span className={active ? "text-white/80" : "text-accent/70"}>{count}</span>
+            ) : null}
+          </button>
+        );
+      })}
     </div>
   );
 }

@@ -213,6 +213,33 @@ describe("Notes route", () => {
     expect(firstRow.getByLabelText(/pinned/i)).toBeInTheDocument();
   });
 
+  it("renders a Pinned tags strip on the home view when the vault has pinned tags", async () => {
+    localStorage.setItem("lens:pinned-tags:dev", JSON.stringify(["daily", "idea"]));
+    installFetch({
+      notes: [],
+      tags: [
+        { name: "daily", count: 7 },
+        { name: "idea", count: 3 },
+      ],
+    });
+
+    render(<Notes />, { wrapper: Wrapper });
+
+    // Strip buttons render as pressable chips, not links, so tag filters apply
+    // in-place rather than routing away.
+    const dailyChip = await screen.findByRole("button", { name: /#daily/i });
+    expect(dailyChip).toHaveAttribute("aria-pressed", "false");
+    fireEvent.click(dailyChip);
+    await waitFor(() => expect(dailyChip).toHaveAttribute("aria-pressed", "true"));
+  });
+
+  it("omits the pinned-tags strip when no tags are pinned", async () => {
+    installFetch({ notes: [], tags: [{ name: "daily", count: 2 }] });
+    render(<Notes />, { wrapper: Wrapper });
+    await screen.findByRole("list", { name: "Notes" }).catch(() => null);
+    expect(screen.queryByRole("button", { name: /#daily/i })).not.toBeInTheDocument();
+  });
+
   it("hides archived notes by default and shows them when toggled on", async () => {
     installFetch({
       notes: [

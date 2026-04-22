@@ -72,10 +72,11 @@ function NoteBody({ note }: { note: Note }) {
     <article className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_18rem]">
       <div className="min-w-0">
         <header className="mb-6 border-b border-border pb-4">
-          <p className="font-mono text-xs text-fg-dim break-all">{label}</p>
-          <h1 className="mt-1 font-serif text-3xl tracking-tight">
+          <h1 className="font-serif text-3xl tracking-tight">
             {note.path ? pathTitle(note.path) : note.id}
           </h1>
+          {note.tags && note.tags.length > 0 ? <HeaderTags tags={note.tags} /> : null}
+          <p className="mt-2 font-mono text-xs text-fg-dim break-all">{label}</p>
           {summary ? <p className="mt-3 text-fg-muted">{summary}</p> : null}
           <div className="mt-4 flex flex-wrap items-center gap-2">
             <Link
@@ -109,7 +110,6 @@ function NoteBody({ note }: { note: Note }) {
 
       <aside className="space-y-6 text-sm lg:sticky lg:top-24 lg:self-start">
         <MetadataPanel note={note} />
-        {note.tags && note.tags.length > 0 ? <TagsPanel tags={note.tags} /> : null}
         {outbound.length > 0 ? (
           <LinksPanel title="Outbound" links={outbound} peer="target" />
         ) : null}
@@ -165,22 +165,19 @@ function Row({ label, value }: { label: string; value: React.ReactNode }) {
   );
 }
 
-function TagsPanel({ tags }: { tags: string[] }) {
+function HeaderTags({ tags }: { tags: string[] }) {
   return (
-    <section className="rounded-md border border-border bg-card p-4">
-      <h2 className="mb-2 text-xs uppercase tracking-wider text-fg-dim">Tags</h2>
-      <div className="flex flex-wrap gap-1.5">
-        {tags.map((t) => (
-          <Link
-            key={t}
-            to={`/?tag=${encodeURIComponent(t)}`}
-            className="rounded-full border border-border bg-bg/60 px-2 py-0.5 text-xs text-fg-dim hover:text-accent"
-          >
-            {t}
-          </Link>
-        ))}
-      </div>
-    </section>
+    <div className="mt-3 flex flex-wrap gap-1.5" aria-label="Tags">
+      {tags.map((t) => (
+        <Link
+          key={t}
+          to={`/?tag=${encodeURIComponent(t)}`}
+          className="rounded-full border border-accent/40 bg-accent/10 px-2.5 py-0.5 text-xs font-medium text-accent hover:border-accent hover:bg-accent/20"
+        >
+          #{t}
+        </Link>
+      ))}
+    </div>
   );
 }
 
