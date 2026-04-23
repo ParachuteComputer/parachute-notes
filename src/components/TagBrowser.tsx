@@ -106,15 +106,10 @@ function groupAndRank(tags: TagSummary[], pinnedSet: Set<string>): Entry[] {
   // children shouldn't jump above a single heavy tag.
   const entries: Entry[] = [...leaves, ...Array.from(groups.values())];
 
-  const rankOf = (
-    e: Entry,
-  ): { pinned: boolean; count: number; label: string } => {
-    if (e.kind === "leaf")
-      return { pinned: e.pinned, count: e.count, label: e.label };
-    const anyPinned =
-      (e.selfTag?.pinned ?? false) || e.children.some((c) => c.pinned);
-    const heaviest =
-      Math.max(e.selfTag?.count ?? 0, ...e.children.map((c) => c.count)) || 0;
+  const rankOf = (e: Entry): { pinned: boolean; count: number; label: string } => {
+    if (e.kind === "leaf") return { pinned: e.pinned, count: e.count, label: e.label };
+    const anyPinned = (e.selfTag?.pinned ?? false) || e.children.some((c) => c.pinned);
+    const heaviest = Math.max(e.selfTag?.count ?? 0, ...e.children.map((c) => c.count)) || 0;
     return { pinned: anyPinned, count: heaviest, label: e.prefix };
   };
 
@@ -128,26 +123,10 @@ function groupAndRank(tags: TagSummary[], pinnedSet: Set<string>): Entry[] {
   return entries;
 }
 
-export function TagBrowser({
-  tags,
-  pinnedTags,
-  selected,
-  onToggle,
-  onClear,
-  isLoading,
-}: Props) {
-  const pinnedSet = useMemo(
-    () => new Set(pinnedTags.map((p) => p.toLowerCase())),
-    [pinnedTags],
-  );
-  const selectedSet = useMemo(
-    () => new Set(selected.map((s) => s.toLowerCase())),
-    [selected],
-  );
-  const entries = useMemo(
-    () => groupAndRank(tags, pinnedSet),
-    [tags, pinnedSet],
-  );
+export function TagBrowser({ tags, pinnedTags, selected, onToggle, onClear, isLoading }: Props) {
+  const pinnedSet = useMemo(() => new Set(pinnedTags.map((p) => p.toLowerCase())), [pinnedTags]);
+  const selectedSet = useMemo(() => new Set(selected.map((s) => s.toLowerCase())), [selected]);
+  const entries = useMemo(() => groupAndRank(tags, pinnedSet), [tags, pinnedSet]);
 
   // Per-group open state. Default all groups to collapsed so the sidebar
   // stays scannable at a glance — users expand what they care about.
@@ -166,11 +145,7 @@ export function TagBrowser({
       <div className="mb-2 flex items-baseline justify-between">
         <h2 className="text-xs uppercase tracking-wider text-fg-dim">Tags</h2>
         {selected.length > 0 ? (
-          <button
-            type="button"
-            onClick={onClear}
-            className="text-xs text-fg-dim hover:text-accent"
-          >
+          <button type="button" onClick={onClear} className="text-xs text-fg-dim hover:text-accent">
             Clear
           </button>
         ) : null}
@@ -234,9 +209,7 @@ function TagRow({
       aria-pressed={active}
       title={`#${name}`}
       className={`flex w-full items-center gap-1.5 rounded-md px-2 py-1 text-left text-sm ${
-        active
-          ? "bg-accent/15 text-accent"
-          : "text-fg-muted hover:bg-bg/60 hover:text-accent"
+        active ? "bg-accent/15 text-accent" : "text-fg-muted hover:bg-bg/60 hover:text-accent"
       }`}
     >
       {pinned ? (
@@ -263,17 +236,12 @@ function TagGroup({
   selectedSet: Set<string>;
   onToggleTag: (name: string) => void;
 }) {
-  const anyChildSelected = group.children.some((c) =>
-    selectedSet.has(c.name.toLowerCase()),
-  );
-  const selfSelected = group.selfTag
-    ? selectedSet.has(group.selfTag.name.toLowerCase())
-    : false;
+  const anyChildSelected = group.children.some((c) => selectedSet.has(c.name.toLowerCase()));
+  const selfSelected = group.selfTag ? selectedSet.has(group.selfTag.name.toLowerCase()) : false;
   // Force open whenever a descendant (or the self-tag) is selected, so the
   // user can see what's active without having to manually expand.
   const effectiveOpen = isOpen || anyChildSelected || selfSelected;
-  const groupPinned =
-    (group.selfTag?.pinned ?? false) || group.children.some((c) => c.pinned);
+  const groupPinned = (group.selfTag?.pinned ?? false) || group.children.some((c) => c.pinned);
 
   return (
     <div>
@@ -293,7 +261,7 @@ function TagGroup({
           <TagRow
             name={group.selfTag.name}
             label={group.prefix}
-            count={group.totalCount}
+            count={group.selfTag.count}
             pinned={group.selfTag.pinned}
             active={selfSelected}
             onToggle={() => onToggleTag(group.selfTag!.name)}
@@ -310,9 +278,7 @@ function TagGroup({
               </span>
             ) : null}
             <span className="flex-1 truncate">#{group.prefix}/</span>
-            <span className="shrink-0 text-xs text-fg-dim">
-              {group.totalCount}
-            </span>
+            <span className="shrink-0 text-xs text-fg-dim">{group.totalCount}</span>
           </button>
         )}
       </div>

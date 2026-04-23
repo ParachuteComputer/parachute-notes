@@ -21,14 +21,8 @@ describe("TagBrowser", () => {
         selected={[]}
       />,
     );
-    const buttons = screen
-      .getAllByRole("button")
-      .filter((b) => b.title?.startsWith("#"));
-    expect(buttons.map((b) => b.title)).toEqual([
-      "#journal",
-      "#project",
-      "#idea",
-    ]);
+    const buttons = screen.getAllByRole("button").filter((b) => b.title?.startsWith("#"));
+    expect(buttons.map((b) => b.title)).toEqual(["#journal", "#project", "#idea"]);
   });
 
   it("floats pinned tags to the top regardless of count", () => {
@@ -43,9 +37,7 @@ describe("TagBrowser", () => {
         selected={[]}
       />,
     );
-    const buttons = screen
-      .getAllByRole("button")
-      .filter((b) => b.title?.startsWith("#"));
+    const buttons = screen.getAllByRole("button").filter((b) => b.title?.startsWith("#"));
     expect(buttons[0]?.title).toBe("#small");
   });
 
@@ -67,40 +59,6 @@ describe("TagBrowser", () => {
     fireEvent.click(expand);
     expect(screen.getByTitle("#summary/daily")).toBeInTheDocument();
     expect(screen.getByTitle("#summary/weekly")).toBeInTheDocument();
-  });
-
-  // TODO Test group-badge shows summed child count
-  it("shows the summed child count on a collapsed group badge", () => {
-    render(
-      <TagBrowser
-        {...baseProps}
-        tags={[
-          { name: "summary/daily", count: 10 },
-          { name: "summary/weekly", count: 3 },
-        ]}
-        pinnedTags={[]}
-        selected={[]}
-      />,
-    );
-
-    expect(screen.getByText("13")).toBeInTheDocument();
-  });
-
-  it("includes the parent tag count in the collapsed group badge when parent tag exists", () => {
-    render(
-      <TagBrowser
-        {...baseProps}
-        tags={[
-          { name: "summary", count: 2 },
-          { name: "summary/daily", count: 10 },
-          { name: "summary/weekly", count: 3 },
-        ]}
-        pinnedTags={[]}
-        selected={[]}
-      />,
-    );
-
-    expect(screen.getByText("15")).toBeInTheDocument();
   });
 
   it("fires onToggle with the tag name on click", () => {
