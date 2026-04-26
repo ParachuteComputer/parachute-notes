@@ -1,10 +1,10 @@
 // Per-host service registry shared across the Parachute ecosystem. Vault and
 // scribe each carry their own copy of this helper rather than depending on
-// `@openparachute/cli`. Notes does the same so launch surfaces (CLI expose,
+// `@openparachute/hub`. Notes does the same so launch surfaces (hub expose,
 // Funnel, dashboards) can find a running dev server without coordination.
 //
 // The schema (name/port/paths/health/version) and validation are locked by
-// `@openparachute/cli`'s `services-manifest.ts`. If you change them here,
+// `@openparachute/hub`'s `services-manifest.ts`. If you change them here,
 // keep them in sync there.
 
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";

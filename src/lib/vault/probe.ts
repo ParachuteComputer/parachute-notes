@@ -14,8 +14,8 @@ export interface ProbeResult {
 
 const DEFAULT_TIMEOUT_MS = 2500;
 
-// Canonical Parachute hub address on a local install. The CLI binds the hub
-// to 127.0.0.1:1939 (see parachute-cli/src/service-spec.ts). Hardcoded here
+// Canonical Parachute hub address on a local install. The hub binds itself
+// to 127.0.0.1:1939 (see parachute-hub/src/service-spec.ts). Hardcoded here
 // because the browser has no other way to discover it — `~/.parachute/hub.port`
 // is on disk, not visible to JS. Used as a fallback when the same-origin
 // probe fails (e.g. Notes is served standalone at :1942 instead of behind
