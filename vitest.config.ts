@@ -1,6 +1,6 @@
 import path from "node:path";
 import react from "@vitejs/plugin-react";
-import { defineConfig } from "vitest/config";
+import { configDefaults, defineConfig } from "vitest/config";
 
 export default defineConfig({
   // Mirror the production default so `import.meta.env.BASE_URL` in tests
@@ -19,5 +19,8 @@ export default defineConfig({
     environment: "jsdom",
     setupFiles: ["./src/test/setup.ts"],
     css: false,
+    // `.claude/` may host an untracked agent worktree (duplicate source copies);
+    // exclude so vitest doesn't run those duplicates as tests.
+    exclude: [...configDefaults.exclude, "**/.claude/**"],
   },
 });
