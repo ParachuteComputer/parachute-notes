@@ -26,6 +26,12 @@ export interface PendingUpdateNote {
   // Either a server ID or a local ID awaiting resolution via the id-map.
   targetId: string;
   payload: UpdateNotePayload;
+  // Last-known `note.updatedAt` captured at enqueue time — supplied as
+  // `if_updated_at` on drain so an offline write doesn't silently overwrite a
+  // cross-device write that landed first. Optional for forward-compat with
+  // rows enqueued before this field existed; the drain handler treats a
+  // missing baseline like a 428 (refetch + retry).
+  baselineUpdatedAt?: string;
 }
 
 export interface PendingDeleteNote {

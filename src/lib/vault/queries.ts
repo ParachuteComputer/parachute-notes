@@ -238,7 +238,21 @@ async function enqueueUpdate(
   payload: UpdateNotePayload,
   existing: Note | undefined,
 ): Promise<Note> {
-  await enqueue(db, { kind: "update-note", targetId, payload }, { vaultId });
+  // Baseline carries the last-known server `updatedAt` so the drain handler
+  // can send `if_updated_at` and avoid silently clobbering a peer's edit. A
+  // missing baseline (note never fetched in this session) is fine — the drain
+  // gets a 428 on first PATCH, refetches, and retries.
+  const baselineUpdatedAt = existing?.updatedAt;
+  await enqueue(
+    db,
+    {
+      kind: "update-note",
+      targetId,
+      payload,
+      ...(baselineUpdatedAt && { baselineUpdatedAt }),
+    },
+    { vaultId },
+  );
   const base: Note = existing ?? { id: targetId, createdAt: new Date().toISOString() };
   return {
     ...base,

@@ -1,4 +1,5 @@
 import {
+  type UpdateNotePayload,
   VaultAuthError,
   type VaultClient,
   VaultConflictError,
@@ -190,7 +191,7 @@ async function runMutation(ctx: DrainContext, row: PendingRow): Promise<void> {
       if (!targetId) {
         throw new DeferRowError(`Awaiting local id ${m.targetId}`);
       }
-      await ctx.client.updateNote(targetId, m.payload);
+      await drainUpdateNote(ctx.client, targetId, m.payload, m.baselineUpdatedAt);
       return;
     }
     case "update-settings": {
@@ -277,6 +278,57 @@ export async function discardRow(db: LensDB, seq: number): Promise<void> {
 // device but low enough that a genuinely pathological conflict loop doesn't
 // starve the drain.
 const SETTINGS_MERGE_RETRIES = 3;
+
+// Mirror of SETTINGS_MERGE_RETRIES for note PATCH; same rationale.
+const NOTE_MERGE_RETRIES = 3;
+
+// Drain handler for `update-note`. Sends the PATCH with the enqueue-time
+// `if_updated_at` baseline; on 428 (no baseline) or 409 (stale baseline) we
+// pull a fresh baseline (preferring the server's `current_updated_at` from
+// the conflict body, falling back to a refetch) and retry. After
+// NOTE_MERGE_RETRIES we force the write — last-resort fallback so a
+// genuinely pathological conflict loop doesn't strand the row in
+// needs-human. Unlike settings, note PATCH carries the user's intended
+// values directly (no structural merge), so "re-apply on fresh content"
+// here just means "resend the same payload with a fresher baseline".
+async function drainUpdateNote(
+  client: VaultClient,
+  targetId: string,
+  payload: UpdateNotePayload,
+  initialBaseline: string | undefined,
+): Promise<void> {
+  let baseline = initialBaseline;
+  for (let attempt = 0; attempt <= NOTE_MERGE_RETRIES; attempt++) {
+    const callPayload: UpdateNotePayload = baseline
+      ? { ...payload, if_updated_at: baseline }
+      : { ...payload };
+    try {
+      await client.updateNote(targetId, callPayload);
+      return;
+    } catch (err) {
+      if (err instanceof VaultConflictError && attempt < NOTE_MERGE_RETRIES) {
+        if (err.currentUpdatedAt) {
+          baseline = err.currentUpdatedAt;
+        } else {
+          const fresh = await client.getNote(targetId);
+          if (!fresh) {
+            // Note vanished between PATCH and GET — let the outer drain drop
+            // the row via its 404 handler instead of forcing.
+            throw new VaultNotFoundError(`Note ${targetId} disappeared during retry`);
+          }
+          baseline = fresh.updatedAt ?? fresh.createdAt;
+        }
+        continue;
+      }
+      if (err instanceof VaultConflictError) {
+        // Exhausted polite retries — force the write.
+        await client.updateNote(targetId, { ...payload, force: true });
+        return;
+      }
+      throw err;
+    }
+  }
+}
 
 // Drain handler for `update-settings`. We refetch the settings note, merge
 // the enqueued patch onto whatever the server currently shows, and PATCH

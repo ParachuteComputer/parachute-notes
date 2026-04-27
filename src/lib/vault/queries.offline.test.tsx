@@ -2,7 +2,7 @@ import { type LensDB, openLensDB } from "@/lib/sync/db";
 import { isLocalId } from "@/lib/sync/id-map";
 import { countPending, listPending } from "@/lib/sync/queue";
 import { SyncProvider, useSync } from "@/providers/SyncProvider";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClient, QueryClientProvider, useQueryClient } from "@tanstack/react-query";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -135,6 +135,43 @@ describe("mutation hooks — offline dispatch", () => {
     const sharedDb = await openLensDB();
     const rows = await listPending(sharedDb, "v1");
     expect(rows[0].mutation.kind).toBe("update-note");
+    sharedDb.close();
+  });
+
+  it("useUpdateNote captures baselineUpdatedAt from the cached note", async () => {
+    // The drain handler uses this as `if_updated_at` so an offline write
+    // doesn't silently overwrite a peer's edit (notes#84). Verify it's
+    // populated from the QueryClient cache at enqueue time.
+    function useUpdateWithSeededCache(id: string) {
+      const qc = useQueryClient();
+      const update = useUpdateNote(id);
+      const sync = useSync();
+      return { qc, update, sync };
+    }
+
+    const { result } = renderHook(() => useUpdateWithSeededCache("srv-42"), {
+      wrapper: wrapper(),
+    });
+    await waitFor(() => {
+      expect(result.current.sync.db).not.toBeNull();
+    });
+    act(() => {
+      result.current.qc.setQueryData(["note", "v1", "srv-42"], {
+        id: "srv-42",
+        createdAt: "2026-04-20T00:00:00Z",
+        updatedAt: "2026-04-26T12:00:00Z",
+      });
+    });
+    await act(async () => {
+      await result.current.update.mutateAsync({ content: "# updated" });
+    });
+
+    const sharedDb = await openLensDB();
+    const rows = await listPending(sharedDb, "v1");
+    expect(rows[0].mutation.kind).toBe("update-note");
+    if (rows[0].mutation.kind === "update-note") {
+      expect(rows[0].mutation.baselineUpdatedAt).toBe("2026-04-26T12:00:00Z");
+    }
     sharedDb.close();
   });
 });

@@ -160,7 +160,11 @@ export class VaultClient {
     if (res.status === 404) {
       throw new VaultNotFoundError(`${init.method ?? "GET"} ${path} → 404`);
     }
-    if (res.status === 409) {
+    if (res.status === 409 || res.status === 428) {
+      // 409 = baseline mismatch (sent stale `if_updated_at`); 428 = baseline
+      // missing (didn't send `if_updated_at` and `force` wasn't set). Both
+      // recover the same way — refetch the note for a fresh baseline and
+      // retry — so we collapse them into one error class.
       const body = (await res.json().catch(() => ({}))) as {
         error?: string;
         target?: string;
