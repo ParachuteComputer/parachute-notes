@@ -1,14 +1,15 @@
 import { useEffect, useState } from "react";
 import { discoverAuthServer } from "./discovery";
-import { fetchParachuteJson, pickVault } from "./parachute-json";
 import { useVaultStore } from "./store";
 
 export type ProbeStatus = "probing" | "found" | "not-found" | "skipped";
 
 export interface ProbeResult {
   status: ProbeStatus;
-  // Full vault URL (origin + `/vault/<name>`), not just origin. Naming kept
-  // for backwards-compat with existing callers.
+  // The OAuth issuer URL — passed straight into `beginOAuth`. Under
+  // hub-as-issuer this is the hub origin; under a standalone vault it's the
+  // vault URL. Naming `origin` (not `issuerUrl`) is kept for backwards-compat
+  // with existing callers; semantically these are the same thing.
   origin: string | null;
 }
 
@@ -22,44 +23,20 @@ const DEFAULT_TIMEOUT_MS = 2500;
 // the hub portal at :1939/notes).
 const LOCAL_HUB_URL = "http://127.0.0.1:1939";
 
-// Probe an input URL for a Parachute OAuth issuer. Two paths, in this order:
+// Probe a candidate URL for an OAuth authorization server. Under hub-as-issuer
+// the hub origin itself answers `/.well-known/oauth-authorization-server`; the
+// JWT it mints carries a `services` catalog so notes never has to chase a
+// vault URL separately. For a standalone vault (no hub fronting it), the
+// vault URL itself answers OAuth metadata directly. Same probe shape covers
+// both cases.
 //
-//   1. Ecosystem registry: `${origin}/.well-known/parachute.json` → pick a
-//      vault entry (name=default, else first) → validate by hitting its
-//      OAuth metadata. This is the path that matters for the hub-as-portal
-//      case: the hub origin *itself* proxies OAuth metadata (so direct
-//      discovery would succeed at the hub origin, which isn't a vault),
-//      but only the registry reveals the actual vault resource URL
-//      (`${origin}/vault/<name>`). Preferring the registry ensures Notes
-//      ends up pointing at the vault and not at the portal.
-//   2. Direct OAuth discovery fallback:
-//      `${input}/.well-known/oauth-authorization-server`. Covers the
-//      standalone vault case (user pastes `http://localhost:1940`) and
-//      the vault-behind-a-non-hub-proxy case (user pastes
-//      `https://my-vault.example.com/vault/default`) — neither serves
-//      parachute.json, but both answer OAuth metadata directly.
-//
-// Returns the URL that successfully resolves OAuth metadata (either the
-// registry-pointed vault URL or the input itself), or null if neither
-// path resolves.
-export async function probeVaultAtOrigin(
+// Returns the probed URL on success, or `null` if discovery fails or times out.
+export async function probeIssuerAtOrigin(
   origin: string,
   timeoutMs: number = DEFAULT_TIMEOUT_MS,
   fetchImpl: typeof fetch = fetch.bind(globalThis),
 ): Promise<string | null> {
-  const manifest = await fetchParachuteJson(origin, timeoutMs, fetchImpl);
-  if (manifest) {
-    const chosen = pickVault(manifest);
-    if (chosen) {
-      const validated = await tryDiscoverAuthServer(chosen.url, timeoutMs, fetchImpl);
-      if (validated) return validated;
-    }
-  }
-
-  const direct = await tryDiscoverAuthServer(origin, timeoutMs, fetchImpl);
-  if (direct) return direct;
-
-  return null;
+  return tryDiscoverAuthServer(origin, timeoutMs, fetchImpl);
 }
 
 async function tryDiscoverAuthServer(
@@ -84,25 +61,25 @@ async function tryDiscoverAuthServer(
 // Try the same-origin probe first, then fall back to the canonical local hub.
 // The fallback covers the standalone-notes case (`parachute install notes` →
 // `http://localhost:1942/notes`): the static notes server doesn't serve
-// `parachute.json`, but the hub on 1939 does. We only attempt the fallback
-// for localhost-ish origins that aren't already on the hub port — never for
+// OAuth metadata, but the hub on 1939 does. We only attempt the fallback for
+// localhost-ish origins that aren't already on the hub port — never for
 // remote/tailscale origins, where reaching the user's loopback would be
 // nonsensical (and CORS would block it anyway).
 //
 // CORS note: the fallback is cross-origin (1942 → 1939). The hub must serve
-// `Access-Control-Allow-Origin: *` on `/.well-known/parachute.json` for the
-// browser to expose the response body. If it doesn't, the fetch rejects and
-// we fall through to manual entry — same as if the hub weren't running.
-export async function probeForVault(
+// `Access-Control-Allow-Origin: *` on `/.well-known/oauth-authorization-server`
+// for the browser to expose the response body. If it doesn't, the fetch
+// rejects and we fall through to manual entry.
+export async function probeForIssuer(
   pageOrigin: string,
   timeoutMs: number = DEFAULT_TIMEOUT_MS,
   fetchImpl: typeof fetch = fetch.bind(globalThis),
 ): Promise<string | null> {
-  const sameOrigin = await probeVaultAtOrigin(pageOrigin, timeoutMs, fetchImpl);
+  const sameOrigin = await probeIssuerAtOrigin(pageOrigin, timeoutMs, fetchImpl);
   if (sameOrigin) return sameOrigin;
 
   if (shouldTryLocalHubFallback(pageOrigin)) {
-    const local = await probeVaultAtOrigin(LOCAL_HUB_URL, timeoutMs, fetchImpl);
+    const local = await probeIssuerAtOrigin(LOCAL_HUB_URL, timeoutMs, fetchImpl);
     if (local) return local;
   }
 
@@ -140,7 +117,7 @@ export function useOriginVaultProbe(): ProbeResult {
     }
     let cancelled = false;
     setResult({ status: "probing", origin: null });
-    probeForVault(window.location.origin).then((found) => {
+    probeForIssuer(window.location.origin).then((found) => {
       if (cancelled) return;
       setResult(found ? { status: "found", origin: found } : { status: "not-found", origin: null });
     });

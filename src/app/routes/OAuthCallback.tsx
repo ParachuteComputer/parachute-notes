@@ -1,4 +1,10 @@
-import { completeOAuth, saveServicesCatalog, useVaultStore, vaultIdFromUrl } from "@/lib/vault";
+import {
+  completeOAuth,
+  saveServicesCatalog,
+  storedFromTokenResponse,
+  useVaultStore,
+  vaultIdFromUrl,
+} from "@/lib/vault";
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 
@@ -33,18 +39,19 @@ export function OAuthCallback() {
         const { pending, token } = await completeOAuth(code, state);
         // Hub-issued tokens carry a `services` catalog (Phase 1): trust the
         // hub's vault URL over whatever the user pasted, so a hub login works
-        // even if the user typed the hub origin. Vault-issued tokens (no
-        // catalog) keep the pre-hub behavior of using the pending vault URL.
-        const vaultUrl = token.services?.vault?.url ?? pending.vaultUrl;
+        // even if the user typed the hub origin. Standalone-vault tokens have
+        // no catalog, in which case the issuer URL itself is the vault URL.
+        const vaultUrl = token.services?.vault?.url ?? pending.issuerUrl;
         const id = addVault(
           {
             url: vaultUrl,
             name: token.vault,
             issuer: pending.issuer,
+            tokenEndpoint: pending.tokenEndpoint,
             clientId: pending.clientId,
             scope: token.scope,
           },
-          { accessToken: token.access_token, scope: token.scope, vault: token.vault },
+          storedFromTokenResponse(token),
         );
         if (token.services) saveServicesCatalog(id, token.services);
         navigate("/", { replace: true });

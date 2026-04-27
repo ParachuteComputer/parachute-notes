@@ -19,6 +19,12 @@ export interface VaultClientOptions {
   accessToken: string;
   fetchImpl?: typeof fetch;
   xhrFactory?: () => XMLHttpRequest;
+  // Invoked when the vault returns 401/403. Should attempt a refresh-token
+  // exchange and return the fresh access token, or `null` if refresh is not
+  // possible (legacy `pvt_*` token, no refresh token, or refresh failed).
+  // Without this, the first 401 throws immediately — same behaviour as before
+  // hub-as-issuer landed.
+  onAuthError?: () => Promise<string | null>;
 }
 
 export interface StorageUploadResult {
@@ -104,15 +110,19 @@ export interface CreateNotePayload {
 
 export class VaultClient {
   private readonly baseUrl: string;
-  private readonly token: string;
+  // Mutable so a successful refresh-on-401 retry can rotate the in-memory
+  // token without requiring callers to rebuild the client.
+  private token: string;
   private readonly fetchImpl: typeof fetch;
   private readonly xhrFactory: () => XMLHttpRequest;
+  private readonly onAuthError?: () => Promise<string | null>;
 
   constructor(opts: VaultClientOptions) {
     this.baseUrl = opts.vaultUrl.replace(/\/$/, "");
     this.token = opts.accessToken;
     this.fetchImpl = opts.fetchImpl ?? fetch.bind(globalThis);
     this.xhrFactory = opts.xhrFactory ?? (() => new XMLHttpRequest());
+    this.onAuthError = opts.onAuthError;
   }
 
   get vaultBaseUrl(): string {
@@ -120,6 +130,14 @@ export class VaultClient {
   }
 
   private async request<T>(path: string, init: RequestInit = {}): Promise<T> {
+    return this.requestWithRetry<T>(path, init, true);
+  }
+
+  private async requestWithRetry<T>(
+    path: string,
+    init: RequestInit,
+    allowRetry: boolean,
+  ): Promise<T> {
     const headers = new Headers(init.headers);
     headers.set("Authorization", `Bearer ${this.token}`);
     headers.set("Accept", "application/json");
@@ -130,6 +148,13 @@ export class VaultClient {
     const res = await this.fetchImpl(`${this.baseUrl}${path}`, { ...init, headers });
 
     if (res.status === 401 || res.status === 403) {
+      if (allowRetry && this.onAuthError) {
+        const fresh = await this.onAuthError();
+        if (fresh) {
+          this.token = fresh;
+          return this.requestWithRetry<T>(path, init, false);
+        }
+      }
       throw new VaultAuthError(`Vault rejected the token (${res.status})`);
     }
     if (res.status === 404) {
@@ -327,14 +352,29 @@ export class VaultClient {
     const target = url.startsWith("http")
       ? url
       : `${this.baseUrl}${url.startsWith("/") ? "" : "/"}${url}`;
+    return this.fetchBlobWithRetry(target, url, true);
+  }
+
+  private async fetchBlobWithRetry(
+    target: string,
+    originalUrl: string,
+    allowRetry: boolean,
+  ): Promise<Blob> {
     const res = await this.fetchImpl(target, {
       headers: { Authorization: `Bearer ${this.token}` },
     });
     if (res.status === 401 || res.status === 403) {
+      if (allowRetry && this.onAuthError) {
+        const fresh = await this.onAuthError();
+        if (fresh) {
+          this.token = fresh;
+          return this.fetchBlobWithRetry(target, originalUrl, false);
+        }
+      }
       throw new VaultAuthError(`Vault rejected the token (${res.status})`);
     }
     if (!res.ok) {
-      throw new Error(`GET ${url} failed (${res.status})`);
+      throw new Error(`GET ${originalUrl} failed (${res.status})`);
     }
     return res.blob();
   }

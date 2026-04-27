@@ -657,6 +657,82 @@ describe("VaultClient", () => {
   });
 });
 
+describe("VaultClient refresh-on-401", () => {
+  // Sequenced fetch mock: lets a single test simulate "401 → refresh → 200".
+  function sequencedFetch(responses: Array<{ ok?: boolean; status?: number; json?: unknown }>) {
+    const queue = [...responses];
+    return vi.fn<typeof fetch>(async () => {
+      const next = queue.shift();
+      if (!next) throw new Error("unexpected fetch call");
+      return {
+        ok: next.ok ?? true,
+        status: next.status ?? 200,
+        json: async () => next.json,
+        text: async () => "",
+      } as Response;
+    });
+  }
+
+  it("retries once with the rotated token when onAuthError yields a fresh access token", async () => {
+    const fetchImpl = sequencedFetch([
+      { ok: false, status: 401 },
+      { json: { name: "default", description: "" } },
+    ]);
+    const onAuthError = vi.fn(async () => "eyJ.new");
+    const client = new VaultClient({
+      vaultUrl: "http://localhost:1940",
+      accessToken: "eyJ.stale",
+      fetchImpl,
+      onAuthError,
+    });
+
+    const info = await client.vaultInfo(false);
+    expect(info.name).toBe("default");
+    expect(onAuthError).toHaveBeenCalledTimes(1);
+
+    // First call carried the stale token, second call carried the fresh one.
+    const firstHeaders = new Headers((fetchImpl.mock.calls[0]?.[1] as RequestInit).headers);
+    const secondHeaders = new Headers((fetchImpl.mock.calls[1]?.[1] as RequestInit).headers);
+    expect(firstHeaders.get("Authorization")).toBe("Bearer eyJ.stale");
+    expect(secondHeaders.get("Authorization")).toBe("Bearer eyJ.new");
+  });
+
+  it("throws VaultAuthError without retrying when onAuthError returns null", async () => {
+    const fetchImpl = sequencedFetch([{ ok: false, status: 401 }]);
+    const onAuthError = vi.fn(async () => null);
+    const client = new VaultClient({
+      vaultUrl: "http://localhost:1940",
+      accessToken: "eyJ.stale",
+      fetchImpl,
+      onAuthError,
+    });
+
+    await expect(client.vaultInfo(false)).rejects.toBeInstanceOf(VaultAuthError);
+    expect(onAuthError).toHaveBeenCalledTimes(1);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not loop on a second 401 — caps at one retry", async () => {
+    // If the refresh-issued token is also rejected (e.g. vault hasn't picked up
+    // the new key yet), we surface VaultAuthError instead of looping forever.
+    const fetchImpl = sequencedFetch([
+      { ok: false, status: 401 },
+      { ok: false, status: 401 },
+    ]);
+    const onAuthError = vi.fn(async () => "eyJ.also-stale");
+    const client = new VaultClient({
+      vaultUrl: "http://localhost:1940",
+      accessToken: "eyJ.stale",
+      fetchImpl,
+      onAuthError,
+    });
+
+    await expect(client.vaultInfo(false)).rejects.toBeInstanceOf(VaultAuthError);
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    expect(onAuthError).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe("VaultClient default fetch binding", () => {
   // Regression for "TypeError: Failed to execute 'fetch' on 'Window': Illegal invocation".
   // Browser's native `fetch` requires its `this` receiver to be the global (Window).

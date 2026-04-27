@@ -1,10 +1,20 @@
-export type TokenScope = "full" | "read";
+// OAuth scope strings are whitespace-separated lists per RFC 6749 §3.3.
+// Phase 1 used a closed set ("full" | "read"); Phase B2 (hub-as-issuer) uses
+// the `<service>:<verb>` vocabulary in `parachute-patterns/oauth-scopes.md`,
+// e.g. "vault:read vault:write". The type stays open because the parser is
+// liberal — unknown scopes pass through and just don't match anything.
+export type TokenScope = string;
 
 export interface VaultRecord {
   id: string;
   url: string;
   name: string;
   issuer: string;
+  // Captured at connect time so refreshAccessToken doesn't have to re-run AS
+  // discovery on every silent rotate. Optional only for forward-compat with
+  // pre-hub-as-issuer records that may live in localStorage on first upgrade —
+  // those records are pvt_*-token-only and won't refresh anyway.
+  tokenEndpoint?: string;
   clientId: string;
   scope: TokenScope;
   addedAt: string;
@@ -15,6 +25,14 @@ export interface StoredToken {
   accessToken: string;
   scope: TokenScope;
   vault: string;
+  // Hub-issued JWTs include refresh + expiry so notes can silently rotate the
+  // access token without re-prompting consent. Vault-issued legacy `pvt_*`
+  // tokens omit both — they don't expire and can't be refreshed.
+  refreshToken?: string;
+  // Absolute UTC ms (`Date.now()` baseline) computed at issuance as
+  // `now + expires_in * 1000`. Easier for the 401-driven refresh path than
+  // tracking `iat + expires_in` separately.
+  expiresAt?: number;
 }
 
 export interface AuthorizationServerMetadata {
@@ -55,6 +73,8 @@ export interface TokenResponse {
   token_type: "bearer";
   scope: TokenScope;
   vault: string;
+  refresh_token?: string;
+  expires_in?: number;
   services?: ServicesCatalog;
 }
 
@@ -119,7 +139,11 @@ export interface TagSummary {
 }
 
 export interface PendingOAuthState {
-  vaultUrl: string;
+  // The OAuth issuer URL (where `/.well-known/oauth-authorization-server`
+  // resolves). Under hub-as-issuer this is the hub origin; under a standalone
+  // vault it's the vault URL. The token endpoint is captured separately so
+  // the issuer can be a bare origin even when the AS lives at a path.
+  issuerUrl: string;
   issuer: string;
   tokenEndpoint: string;
   clientId: string;

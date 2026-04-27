@@ -57,7 +57,9 @@ export async function registerClient(
     body: JSON.stringify({
       client_name: "Parachute Notes",
       redirect_uris: [redirectUri],
-      grant_types: ["authorization_code"],
+      // Declare refresh_token so the hub can issue rotated refresh tokens
+      // alongside the access token (RFC 6749 §6, hub#66).
+      grant_types: ["authorization_code", "refresh_token"],
       response_types: ["code"],
       token_endpoint_auth_method: "none",
     }),
