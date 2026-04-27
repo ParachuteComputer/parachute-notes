@@ -59,21 +59,21 @@ describe("AddVault URL prefill", () => {
   it("prefills the URL input from ?url= regardless of probe outcome", async () => {
     mockFetchOnce({ throwNetwork: true });
     renderAddVault("/add?url=http%3A%2F%2Fvault.example%3A1940");
-    const input = screen.getByLabelText(/vault url/i) as HTMLInputElement;
+    const input = screen.getByLabelText(/hub url/i) as HTMLInputElement;
     expect(input.value).toBe("http://vault.example:1940");
   });
 
   it("prefills the URL input with the detected origin when the probe succeeds", async () => {
     mockFetchOnce({ json: validMetadata });
     renderAddVault();
-    const input = screen.getByLabelText(/vault url/i) as HTMLInputElement;
+    const input = screen.getByLabelText(/hub url/i) as HTMLInputElement;
     await waitFor(() => expect(input.value).toBe(window.location.origin));
   });
 
   it("leaves the URL input empty when the probe fails", async () => {
     const fetchImpl = mockFetchOnce({ throwNetwork: true });
     renderAddVault();
-    const input = screen.getByLabelText(/vault url/i) as HTMLInputElement;
+    const input = screen.getByLabelText(/hub url/i) as HTMLInputElement;
     // Wait for the probe to settle — fetchImpl should have been called.
     await waitFor(() => expect(fetchImpl).toHaveBeenCalled());
     expect(input.value).toBe("");

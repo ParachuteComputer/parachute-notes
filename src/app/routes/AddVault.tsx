@@ -54,30 +54,30 @@ export function AddVault() {
     <div className="mx-auto max-w-xl px-6 py-16">
       <h1 className="mb-2 font-serif text-4xl tracking-tight">Connect a vault</h1>
       <p className="mb-8 text-fg-muted">
-        Paste the URL of a Parachute Vault. You'll be taken to its consent page to authorize
-        Parachute Notes.
+        Paste your Parachute hub URL. You'll be taken to its consent page to authorize Parachute
+        Notes.
       </p>
 
       <form onSubmit={onSubmit} className="space-y-4">
         <div>
           <label htmlFor="vault-url" className="mb-1.5 block text-sm font-medium text-fg">
-            Vault URL
+            Hub URL
           </label>
           <input
             id="vault-url"
             ref={inputRef}
             type="url"
             required
-            placeholder="http://localhost:1940"
+            placeholder="http://localhost:1939"
             value={url}
             onChange={(e) => setUrl(e.target.value)}
             disabled={submitting}
             className="w-full rounded-md border border-border bg-card px-3 py-2 font-mono text-sm text-fg focus:border-accent focus:outline-none"
           />
           <p className="mt-1.5 text-xs text-fg-dim">
-            The Parachute hub URL works too — we'll read the vault URL from the token response.
-            Otherwise paste a vault directly (e.g. <code>https://host/vault/default</code>) or a
-            host that serves a <code>parachute.json</code> registry.
+            For a local install the hub lives at <code>http://localhost:1939</code>. A standalone
+            vault URL (e.g. <code>https://host/vault/default</code>) also works — Notes will OAuth
+            against whichever issuer answers.
           </p>
         </div>
 

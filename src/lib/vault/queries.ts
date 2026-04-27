@@ -12,6 +12,7 @@ import {
   VaultClient,
 } from "./client";
 import { type NoteQueryState, buildNoteQueryParams } from "./note-query";
+import { forceRefresh } from "./refresh";
 import { loadToken } from "./storage";
 import { useVaultStore } from "./store";
 import type { Note, NoteAttachment } from "./types";
@@ -23,7 +24,11 @@ export function useActiveVaultClient(): VaultClient | null {
     if (!vault || !activeId) return null;
     const token = loadToken(activeId);
     if (!token) return null;
-    return new VaultClient({ vaultUrl: vault.url, accessToken: token.accessToken });
+    return new VaultClient({
+      vaultUrl: vault.url,
+      accessToken: token.accessToken,
+      onAuthError: () => forceRefresh(activeId),
+    });
   }, [vault, activeId]);
 }
 
