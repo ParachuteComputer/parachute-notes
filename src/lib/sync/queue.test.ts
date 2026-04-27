@@ -452,6 +452,155 @@ describe("retryRow / discardRow / clearPendingForVault", () => {
   });
 });
 
+describe("drain — update-note (baseline + retry-on-conflict)", () => {
+  let db: LensDB;
+  beforeEach(async () => {
+    db = await freshDb();
+  });
+  afterEach(() => db.close());
+
+  it("forwards baselineUpdatedAt as if_updated_at on the PATCH", async () => {
+    await enqueue(
+      db,
+      {
+        kind: "update-note",
+        targetId: "srv-1",
+        payload: { content: "x" },
+        baselineUpdatedAt: "2026-04-25T00:00:00Z",
+      },
+      { vaultId: "v1" },
+    );
+    const updateNote = vi.fn(
+      async (id: string) => ({ id, createdAt: "t0", updatedAt: "t1" }) as Note,
+    );
+    const client = makeClient({ updateNote });
+
+    const out = await drain({ db, client, vaultId: "v1", blobStore: createIdbBlobStore(db) });
+
+    expect(out.drained).toBe(1);
+    expect(updateNote).toHaveBeenCalledWith("srv-1", {
+      content: "x",
+      if_updated_at: "2026-04-25T00:00:00Z",
+    });
+  });
+
+  it("on 428 (no baseline), uses current_updated_at from the body to retry", async () => {
+    // Legacy enqueue — no baseline. First PATCH 428s with current_updated_at
+    // in the body; the second PATCH succeeds with that as if_updated_at.
+    await enqueue(
+      db,
+      { kind: "update-note", targetId: "srv-1", payload: { content: "x" } },
+      { vaultId: "v1" },
+    );
+    let calls = 0;
+    const updateNote = vi.fn(async (id: string) => {
+      calls += 1;
+      if (calls === 1) {
+        throw new VaultConflictError({ current_updated_at: "fresh-t1" });
+      }
+      return { id, createdAt: "t0", updatedAt: "t2" } as Note;
+    });
+    const client = makeClient({ updateNote });
+
+    const out = await drain({ db, client, vaultId: "v1", blobStore: createIdbBlobStore(db) });
+
+    expect(out.drained).toBe(1);
+    expect(updateNote).toHaveBeenCalledTimes(2);
+    expect(updateNote.mock.calls[0]).toEqual(["srv-1", { content: "x" }]);
+    expect(updateNote.mock.calls[1]).toEqual([
+      "srv-1",
+      { content: "x", if_updated_at: "fresh-t1" },
+    ]);
+  });
+
+  it("on 409 with stale baseline, refetches when current_updated_at is absent", async () => {
+    // Some failure modes don't include current_updated_at in the body. Fall
+    // back to a getNote() refetch and retry with the fresh updatedAt.
+    await enqueue(
+      db,
+      {
+        kind: "update-note",
+        targetId: "srv-1",
+        payload: { content: "x" },
+        baselineUpdatedAt: "stale-t0",
+      },
+      { vaultId: "v1" },
+    );
+    let calls = 0;
+    const updateNote = vi.fn(async (id: string) => {
+      calls += 1;
+      if (calls === 1) throw new VaultConflictError({});
+      return { id, createdAt: "t0", updatedAt: "t2" } as Note;
+    });
+    const getNote = vi.fn(
+      async (id: string) => ({ id, createdAt: "t0", updatedAt: "fetched-t1" }) as Note,
+    );
+    const client = makeClient({ updateNote, getNote });
+
+    const out = await drain({ db, client, vaultId: "v1", blobStore: createIdbBlobStore(db) });
+
+    expect(out.drained).toBe(1);
+    expect(getNote).toHaveBeenCalledOnce();
+    expect(updateNote.mock.calls[1]).toEqual([
+      "srv-1",
+      { content: "x", if_updated_at: "fetched-t1" },
+    ]);
+  });
+
+  it("after exhausting merge-retries, falls back to force: true", async () => {
+    await enqueue(
+      db,
+      {
+        kind: "update-note",
+        targetId: "srv-1",
+        payload: { content: "x" },
+        baselineUpdatedAt: "t0",
+      },
+      { vaultId: "v1" },
+    );
+    let calls = 0;
+    const updateNote = vi.fn(async (id: string) => {
+      calls += 1;
+      if (calls >= 5) return { id, createdAt: "t0", updatedAt: "t-final" } as Note;
+      throw new VaultConflictError({ current_updated_at: `t-${calls}` });
+    });
+    const client = makeClient({ updateNote });
+
+    const out = await drain({ db, client, vaultId: "v1", blobStore: createIdbBlobStore(db) });
+
+    expect(out.drained).toBe(1);
+    // 4 conditional PATCHes (initial + 3 retries) + 1 forced PATCH.
+    expect(updateNote.mock.calls.length).toBe(5);
+    const lastCall = updateNote.mock.calls.at(-1) as unknown as [
+      string,
+      { content?: string; if_updated_at?: string; force?: boolean },
+    ];
+    expect(lastCall[1].force).toBe(true);
+    expect(lastCall[1].if_updated_at).toBeUndefined();
+    expect(lastCall[1].content).toBe("x");
+  });
+
+  it("drops the row when refetch shows the note has vanished", async () => {
+    await enqueue(
+      db,
+      { kind: "update-note", targetId: "srv-1", payload: { content: "x" } },
+      { vaultId: "v1" },
+    );
+    const updateNote = vi.fn(async () => {
+      // 428 with no current_updated_at → refetch path.
+      throw new VaultConflictError({});
+    });
+    const getNote = vi.fn(async () => null);
+    const client = makeClient({ updateNote, getNote });
+
+    const out = await drain({ db, client, vaultId: "v1", blobStore: createIdbBlobStore(db) });
+
+    // 404-equivalent: outer drain drops the row.
+    expect(out.drained).toBe(1);
+    expect(await countPending(db, "v1")).toBe(0);
+  });
+});
+
 describe("drain — update-settings (merge-on-409 invariant)", () => {
   let db: LensDB;
   beforeEach(async () => {
