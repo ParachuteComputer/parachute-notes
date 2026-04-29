@@ -7,6 +7,7 @@ import {
 } from "@/lib/vault/client";
 import {
   DEFAULT_LENS_SETTINGS,
+  LEGACY_SETTINGS_NOTE_PATH,
   SETTINGS_NOTE_PATH,
   applySettingsPatch,
   extractLensSettings,
@@ -196,12 +197,12 @@ async function runMutation(ctx: DrainContext, row: PendingRow): Promise<void> {
       return;
     }
     case "update-settings": {
-      // A queued op enqueued under a prior settings-note path (e.g. the brief
-      // Lens-rebrand window's `.parachute/lens/settings`) would otherwise drain
-      // to the legacy note instead of the current one. Settings ops are
-      // idempotent — drop the row with a warning; the user re-saves and the
-      // next write goes to the current path.
-      if (m.notePath !== SETTINGS_NOTE_PATH) {
+      // A queued op enqueued under the brief Lens-rebrand window's path
+      // (`.parachute/lens/settings`) would otherwise drain to the legacy note
+      // instead of the current one. Settings ops are idempotent — drop the row
+      // with a warning; the user re-saves and the next write goes to the
+      // current path.
+      if (m.notePath === LEGACY_SETTINGS_NOTE_PATH) {
         console.warn(
           `[settings-queue] dropping queued op for migrated path "${m.notePath}" (current "${SETTINGS_NOTE_PATH}"). Re-save in Settings to apply.`,
         );
