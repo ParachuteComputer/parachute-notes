@@ -287,6 +287,11 @@ export function Capture() {
       reset();
     } catch (e) {
       pushToast(e instanceof Error ? `Capture failed: ${e.message}` : "Capture failed.", "error");
+      // Save failed — release the in-flight flag so the unmount-flush will
+      // still flush a draft if the user edits more text and navigates away.
+      // Without this, a single failed save would silently swallow every
+      // subsequent draft on the same mount.
+      savingRef.current = false;
       // Restore the audio buffer so the user can retry without re-recording.
       if (audio) {
         setPhase({
