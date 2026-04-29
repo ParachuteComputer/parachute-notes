@@ -1,9 +1,11 @@
 import { BottomTabBar } from "@/components/BottomTabBar";
 import { Header } from "@/components/Header";
 import { QuickSwitchMount } from "@/components/QuickSwitchMount";
+import { ReconnectBanner } from "@/components/ReconnectBanner";
 import { Toaster } from "@/components/Toaster";
 import { UpdateBanner } from "@/components/UpdateBanner";
 import { useVaultStore } from "@/lib/vault";
+import { useCrossTabVaultSync } from "@/lib/vault/cross-tab-sync";
 import { QueryProvider } from "@/providers/QueryProvider";
 import { SyncProvider } from "@/providers/SyncProvider";
 import { BrowserRouter, Navigate, Route, Routes, useParams } from "react-router";
@@ -45,6 +47,10 @@ function NoteIdRedirect({ suffix = "" }: { suffix?: string }) {
 }
 
 export function App() {
+  // Wired at the app root (not a provider) so the storage-event listener
+  // outlives every route transition. Same vault state surfaces in every tab
+  // without a refresh.
+  useCrossTabVaultSync();
   return (
     <QueryProvider>
       <SyncProvider>
@@ -52,6 +58,7 @@ export function App() {
           <div className="min-h-dvh overflow-x-hidden bg-bg text-fg pb-16 md:pb-0">
             <Toaster />
             <UpdateBanner />
+            <ReconnectBanner />
             <Header />
             <QuickSwitchMount />
             <main>

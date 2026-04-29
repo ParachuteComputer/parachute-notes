@@ -1,4 +1,5 @@
-import { refreshAccessToken, storedFromTokenResponse } from "./oauth";
+import { useAuthHaltStore } from "./auth-halt-store";
+import { RefreshHttpError, refreshAccessToken, storedFromTokenResponse } from "./oauth";
 import { loadToken, saveToken } from "./storage";
 import { useVaultStore } from "./store";
 
@@ -50,8 +51,24 @@ async function doRefresh(vaultId: string): Promise<string | null> {
       next.refreshToken = stored.refreshToken;
     }
     saveToken(vaultId, next);
+    // Successful exchange — clear any prior halt; the user reconnected
+    // (manually or via a still-valid rotated chain) and we're back online.
+    useAuthHaltStore.getState().clearHalt(vaultId);
     return next.accessToken;
-  } catch {
+  } catch (err) {
+    if (err instanceof RefreshHttpError && err.status >= 400 && err.status < 500) {
+      // 4xx is the hub *deciding* our refresh token is bad — typically RFC
+      // 6749 `invalid_grant` (rotation drift / admin revoke), or a deleted
+      // client registration. Surface a halt; manual reauth is the only
+      // recovery. 5xx (overloaded hub, transient infra) stays unhalted —
+      // the next sync tick retries quietly. Network-level errors don't
+      // throw RefreshHttpError, so they also stay transient.
+      const message =
+        err.oauthError === "invalid_grant" || err.status === 400 || err.status === 401
+          ? "Your vault session expired. Reconnect to resume syncing."
+          : `Token refresh failed (${err.status}). Reconnect to resume syncing.`;
+      useAuthHaltStore.getState().markHalted(vaultId, message);
+    }
     return null;
   }
 }

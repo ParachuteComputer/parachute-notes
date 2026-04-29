@@ -731,6 +731,143 @@ describe("VaultClient refresh-on-401", () => {
     expect(fetchImpl).toHaveBeenCalledTimes(2);
     expect(onAuthError).toHaveBeenCalledTimes(1);
   });
+
+  it("calls onAuthRevoked when the post-refresh retry also returns 401", async () => {
+    const fetchImpl = sequencedFetch([
+      { ok: false, status: 401 },
+      { ok: false, status: 401 },
+    ]);
+    const onAuthError = vi.fn(async () => "eyJ.also-stale");
+    const onAuthRevoked = vi.fn();
+    const client = new VaultClient({
+      vaultUrl: "http://localhost:1940",
+      accessToken: "eyJ.stale",
+      fetchImpl,
+      onAuthError,
+      onAuthRevoked,
+    });
+
+    await expect(client.vaultInfo(false)).rejects.toBeInstanceOf(VaultAuthError);
+    expect(onAuthRevoked).toHaveBeenCalledTimes(1);
+    expect(onAuthRevoked).toHaveBeenCalledWith(401);
+  });
+
+  it("calls onAuthRevoked when there is no refresh callback wired", async () => {
+    // Legacy `pvt_*` token path — VaultClient was constructed without
+    // `onAuthError`, so the first 401 is definitive. Surface the halt so the
+    // banner still appears.
+    const fetchImpl = mockFetch({ ok: false, status: 401 });
+    const onAuthRevoked = vi.fn();
+    const client = new VaultClient({
+      vaultUrl: "http://localhost:1940",
+      accessToken: "pvt_legacy",
+      fetchImpl,
+      onAuthRevoked,
+    });
+
+    await expect(client.vaultInfo(false)).rejects.toBeInstanceOf(VaultAuthError);
+    expect(onAuthRevoked).toHaveBeenCalledWith(401);
+  });
+
+  it("does NOT call onAuthRevoked when refresh succeeds (banner stays hidden on transient 401)", async () => {
+    const fetchImpl = sequencedFetch([
+      { ok: false, status: 401 },
+      { json: { name: "default", description: "" } },
+    ]);
+    const onAuthError = vi.fn(async () => "eyJ.new");
+    const onAuthRevoked = vi.fn();
+    const client = new VaultClient({
+      vaultUrl: "http://localhost:1940",
+      accessToken: "eyJ.stale",
+      fetchImpl,
+      onAuthError,
+      onAuthRevoked,
+    });
+
+    await client.vaultInfo(false);
+    expect(onAuthRevoked).not.toHaveBeenCalled();
+  });
+
+  it("does NOT call onAuthRevoked when onAuthError returned null — refresh.ts owns that halt", async () => {
+    // refresh.ts is responsible for marking halted with a specific reason
+    // when it sees an HTTP error from the token endpoint. Avoid double-marking
+    // (which would clobber the better message with a generic "(401)").
+    const fetchImpl = sequencedFetch([{ ok: false, status: 401 }]);
+    const onAuthError = vi.fn(async () => null);
+    const onAuthRevoked = vi.fn();
+    const client = new VaultClient({
+      vaultUrl: "http://localhost:1940",
+      accessToken: "eyJ.stale",
+      fetchImpl,
+      onAuthError,
+      onAuthRevoked,
+    });
+
+    await expect(client.vaultInfo(false)).rejects.toBeInstanceOf(VaultAuthError);
+    expect(onAuthRevoked).not.toHaveBeenCalled();
+  });
+
+  // Regression: the blob path (audio/image attachment loads) used to short-circuit
+  // before `onAuthRevoked` was invented, so it never fired. A user whose
+  // attachment loads start 401-ing after token revocation would get silent
+  // VaultAuthError throws with no banner. These mirror the requestWithRetry
+  // tests above against `fetchAttachmentBlob`.
+
+  it("blob path: calls onAuthRevoked when the post-refresh retry also returns 401", async () => {
+    const fetchImpl = sequencedFetch([
+      { ok: false, status: 401 },
+      { ok: false, status: 401 },
+    ]);
+    const onAuthError = vi.fn(async () => "eyJ.also-stale");
+    const onAuthRevoked = vi.fn();
+    const client = new VaultClient({
+      vaultUrl: "http://localhost:1940",
+      accessToken: "eyJ.stale",
+      fetchImpl,
+      onAuthError,
+      onAuthRevoked,
+    });
+
+    await expect(client.fetchAttachmentBlob("/api/storage/foo.mp3")).rejects.toBeInstanceOf(
+      VaultAuthError,
+    );
+    expect(onAuthRevoked).toHaveBeenCalledTimes(1);
+    expect(onAuthRevoked).toHaveBeenCalledWith(401);
+  });
+
+  it("blob path: calls onAuthRevoked when there is no refresh callback wired", async () => {
+    const fetchImpl = mockFetch({ ok: false, status: 401 });
+    const onAuthRevoked = vi.fn();
+    const client = new VaultClient({
+      vaultUrl: "http://localhost:1940",
+      accessToken: "pvt_legacy",
+      fetchImpl,
+      onAuthRevoked,
+    });
+
+    await expect(client.fetchAttachmentBlob("/api/storage/foo.mp3")).rejects.toBeInstanceOf(
+      VaultAuthError,
+    );
+    expect(onAuthRevoked).toHaveBeenCalledWith(401);
+  });
+
+  it("blob path: does NOT call onAuthRevoked when onAuthError returned null", async () => {
+    const fetchImpl = sequencedFetch([{ ok: false, status: 401 }]);
+    const onAuthError = vi.fn(async () => null);
+    const onAuthRevoked = vi.fn();
+    const client = new VaultClient({
+      vaultUrl: "http://localhost:1940",
+      accessToken: "eyJ.stale",
+      fetchImpl,
+      onAuthError,
+      onAuthRevoked,
+    });
+
+    await expect(client.fetchAttachmentBlob("/api/storage/foo.mp3")).rejects.toBeInstanceOf(
+      VaultAuthError,
+    );
+    expect(onAuthRevoked).not.toHaveBeenCalled();
+  });
 });
 
 describe("VaultClient default fetch binding", () => {

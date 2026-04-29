@@ -1,4 +1,6 @@
+export * from "./auth-halt-store";
 export * from "./client";
+export * from "./cross-tab-sync";
 export * from "./discovery";
 export * from "./graph";
 export * from "./neighborhood";

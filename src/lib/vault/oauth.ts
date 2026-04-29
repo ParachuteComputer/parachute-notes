@@ -170,6 +170,32 @@ export interface RefreshContext {
   refreshToken: string;
 }
 
+// Thrown by `refreshAccessToken` when the hub answered with a non-2xx —
+// distinct from a network error so callers can tell "server rejected our
+// refresh token" (revoked / rotated past us; surface a reconnect prompt) apart
+// from "couldn't reach the hub at all" (transient; let the next sync tick
+// retry quietly).
+export class RefreshHttpError extends Error {
+  readonly status: number;
+  readonly body: string;
+  readonly oauthError?: string;
+
+  constructor(status: number, body: string) {
+    let oauthError: string | undefined;
+    try {
+      const parsed = JSON.parse(body) as { error?: unknown };
+      if (typeof parsed.error === "string") oauthError = parsed.error;
+    } catch {
+      // Body wasn't JSON — fine; some hubs return text on infra errors.
+    }
+    super(`Token refresh failed (${status}): ${body}`);
+    this.name = "RefreshHttpError";
+    this.status = status;
+    this.body = body;
+    this.oauthError = oauthError;
+  }
+}
+
 /**
  * Exchange a refresh_token for a fresh access (+ rotated refresh) token.
  *
@@ -198,7 +224,7 @@ export async function refreshAccessToken(
 
   if (!res.ok) {
     const text = await res.text();
-    throw new Error(`Token refresh failed (${res.status}): ${text}`);
+    throw new RefreshHttpError(res.status, text);
   }
 
   const token = (await res.json()) as TokenResponse;

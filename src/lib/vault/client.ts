@@ -25,6 +25,13 @@ export interface VaultClientOptions {
   // Without this, the first 401 throws immediately — same behaviour as before
   // hub-as-issuer landed.
   onAuthError?: () => Promise<string | null>;
+  // Invoked when a 401/403 ultimately can't be recovered: either there was no
+  // refresh callback, or the post-refresh retry also got a 401/403 (the new
+  // token is dead too). Lets callers mark the vault as needing reconnect —
+  // distinct from `onAuthError`'s job, which is to attempt refresh. Skipped
+  // when `onAuthError` returned null because that path is expected to record
+  // its own halt with a more specific reason (see refresh.ts).
+  onAuthRevoked?: (status: number) => void;
 }
 
 export interface StorageUploadResult {
@@ -116,6 +123,7 @@ export class VaultClient {
   private readonly fetchImpl: typeof fetch;
   private readonly xhrFactory: () => XMLHttpRequest;
   private readonly onAuthError?: () => Promise<string | null>;
+  private readonly onAuthRevoked?: (status: number) => void;
 
   constructor(opts: VaultClientOptions) {
     this.baseUrl = opts.vaultUrl.replace(/\/$/, "");
@@ -123,6 +131,7 @@ export class VaultClient {
     this.fetchImpl = opts.fetchImpl ?? fetch.bind(globalThis);
     this.xhrFactory = opts.xhrFactory ?? (() => new XMLHttpRequest());
     this.onAuthError = opts.onAuthError;
+    this.onAuthRevoked = opts.onAuthRevoked;
   }
 
   get vaultBaseUrl(): string {
@@ -154,6 +163,12 @@ export class VaultClient {
           this.token = fresh;
           return this.requestWithRetry<T>(path, init, false);
         }
+        // onAuthError returned null — refresh.ts will already have recorded
+        // its own halt with a specific reason if appropriate; don't double-mark.
+      } else {
+        // No refresh path, or we're on the post-refresh retry and the new
+        // token also failed. Either way, the credentials we have are dead.
+        this.onAuthRevoked?.(res.status);
       }
       throw new VaultAuthError(`Vault rejected the token (${res.status})`);
     }
@@ -374,6 +389,11 @@ export class VaultClient {
           this.token = fresh;
           return this.fetchBlobWithRetry(target, originalUrl, false);
         }
+        // onAuthError returned null — refresh.ts owns the halt path.
+      } else {
+        // No refresh path, or post-refresh retry still 401/403. Mirror
+        // requestWithRetry so attachment loads also surface the banner.
+        this.onAuthRevoked?.(res.status);
       }
       throw new VaultAuthError(`Vault rejected the token (${res.status})`);
     }
