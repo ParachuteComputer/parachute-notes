@@ -1,0 +1,10 @@
+{
+  "name": "notes",
+  "manifestName": "parachute-notes",
+  "displayName": "Notes",
+  "tagline": "Notes PWA backed by your vault.",
+  "kind": "frontend",
+  "port": 1942,
+  "paths": ["/notes"],
+  "health": "/notes/health"
+}

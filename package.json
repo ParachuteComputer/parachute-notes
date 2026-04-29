@@ -1,6 +1,6 @@
 {
   "name": "@openparachute/notes",
-  "version": "0.3.4-rc.1",
+  "version": "0.3.5-rc.1",
   "private": false,
   "type": "module",
   "description": "Parachute Notes — the default frontend for Parachute. Browse, edit, and capture in any Parachute Vault.",
@@ -9,7 +9,7 @@
     "type": "git",
     "url": "https://github.com/ParachuteComputer/parachute-notes.git"
   },
-  "files": ["dist", "README.md", "LICENSE"],
+  "files": ["dist", ".parachute/module.json", "README.md", "LICENSE"],
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
