@@ -11,6 +11,7 @@ import {
   type UploadProgress,
   VaultClient,
 } from "./client";
+import { useAuthHaltStore } from "./auth-halt-store";
 import { type NoteQueryState, buildNoteQueryParams } from "./note-query";
 import { forceRefresh } from "./refresh";
 import { loadToken } from "./storage";
@@ -28,6 +29,10 @@ export function useActiveVaultClient(): VaultClient | null {
       vaultUrl: vault.url,
       accessToken: token.accessToken,
       onAuthError: () => forceRefresh(activeId),
+      onAuthRevoked: (status) =>
+        useAuthHaltStore
+          .getState()
+          .markHalted(activeId, `Vault rejected the current session (${status}).`),
     });
   }, [vault, activeId]);
 }

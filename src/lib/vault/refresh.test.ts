@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { useAuthHaltStore } from "./auth-halt-store";
 import { forceRefresh } from "./refresh";
 import { loadToken, saveToken } from "./storage";
 import { useVaultStore } from "./store";
@@ -40,10 +41,12 @@ describe("forceRefresh", () => {
     localStorage.clear();
     sessionStorage.clear();
     useVaultStore.setState({ vaults: {}, activeVaultId: null });
+    useAuthHaltStore.setState({ byVault: {} });
   });
 
   afterEach(() => {
     vi.unstubAllGlobals();
+    useAuthHaltStore.setState({ byVault: {} });
   });
 
   it("posts grant_type=refresh_token, persists the rotated token, and returns the new access token", async () => {
@@ -122,6 +125,87 @@ describe("forceRefresh", () => {
     expect(await forceRefresh("v1")).toBeNull();
     expect(loadToken("v1")?.accessToken).toBe("eyJ.stale");
     expect(loadToken("v1")?.refreshToken).toBe("rt_old");
+  });
+
+  it("marks the vault auth-halted when the hub answers with invalid_grant", async () => {
+    seedVault({ id: "v1" });
+    seedToken("v1", { accessToken: "eyJ.stale", refreshToken: "rt_old" });
+
+    const fetchImpl = vi.fn<typeof fetch>(
+      async () =>
+        ({
+          ok: false,
+          status: 400,
+          json: async () => ({ error: "invalid_grant" }),
+          text: async () => '{"error":"invalid_grant"}',
+        }) as Response,
+    );
+    vi.stubGlobal("fetch", fetchImpl);
+
+    expect(await forceRefresh("v1")).toBeNull();
+    const halt = useAuthHaltStore.getState().byVault.v1;
+    expect(halt).toBeDefined();
+    expect(halt?.reason).toMatch(/expired|reconnect/i);
+  });
+
+  it("marks the vault auth-halted when the hub answers with any 4xx", async () => {
+    seedVault({ id: "v1" });
+    seedToken("v1", { accessToken: "eyJ.stale", refreshToken: "rt_old" });
+
+    const fetchImpl = vi.fn<typeof fetch>(
+      async () =>
+        ({
+          ok: false,
+          status: 401,
+          json: async () => ({}),
+          text: async () => "unauthorized_client",
+        }) as Response,
+    );
+    vi.stubGlobal("fetch", fetchImpl);
+
+    expect(await forceRefresh("v1")).toBeNull();
+    expect(useAuthHaltStore.getState().byVault.v1).toBeDefined();
+  });
+
+  it("does NOT mark halted on a network-level error (transient — let the next tick retry)", async () => {
+    seedVault({ id: "v1" });
+    seedToken("v1", { accessToken: "eyJ.stale", refreshToken: "rt_old" });
+
+    const fetchImpl = vi.fn<typeof fetch>(async () => {
+      throw new TypeError("Failed to fetch");
+    });
+    vi.stubGlobal("fetch", fetchImpl);
+
+    expect(await forceRefresh("v1")).toBeNull();
+    expect(useAuthHaltStore.getState().byVault.v1).toBeUndefined();
+  });
+
+  it("clears any prior halt on a successful refresh", async () => {
+    seedVault({ id: "v1" });
+    seedToken("v1", { accessToken: "eyJ.stale", refreshToken: "rt_old" });
+    useAuthHaltStore.getState().markHalted("v1", "stale halt from earlier");
+
+    const fetchImpl = vi.fn<typeof fetch>(
+      async () =>
+        ({
+          ok: true,
+          status: 200,
+          json: async () => ({
+            access_token: "eyJ.new",
+            token_type: "bearer",
+            scope: "vault:read vault:write",
+            vault: "default",
+            refresh_token: "rt_rotated",
+            expires_in: 900,
+          }),
+          text: async () => "",
+        }) as Response,
+    );
+    vi.stubGlobal("fetch", fetchImpl);
+
+    const access = await forceRefresh("v1");
+    expect(access).toBe("eyJ.new");
+    expect(useAuthHaltStore.getState().byVault.v1).toBeUndefined();
   });
 
   it("dedupes concurrent refreshes so refresh-token rotation only consumes one prior token", async () => {

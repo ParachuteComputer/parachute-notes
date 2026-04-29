@@ -1,6 +1,7 @@
 import { BottomTabBar } from "@/components/BottomTabBar";
 import { Header } from "@/components/Header";
 import { QuickSwitchMount } from "@/components/QuickSwitchMount";
+import { ReconnectBanner } from "@/components/ReconnectBanner";
 import { Toaster } from "@/components/Toaster";
 import { UpdateBanner } from "@/components/UpdateBanner";
 import { useVaultStore } from "@/lib/vault";
@@ -52,6 +53,7 @@ export function App() {
           <div className="min-h-dvh overflow-x-hidden bg-bg text-fg pb-16 md:pb-0">
             <Toaster />
             <UpdateBanner />
+            <ReconnectBanner />
             <Header />
             <QuickSwitchMount />
             <main>

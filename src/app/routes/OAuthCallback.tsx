@@ -5,6 +5,7 @@ import {
   useVaultStore,
   vaultIdFromUrl,
 } from "@/lib/vault";
+import { useAuthHaltStore } from "@/lib/vault/auth-halt-store";
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 
@@ -54,6 +55,8 @@ export function OAuthCallback() {
           storedFromTokenResponse(token),
         );
         if (token.services) saveServicesCatalog(id, token.services);
+        // Reconnect succeeded — clear the halt so the banner disappears.
+        useAuthHaltStore.getState().clearHalt(id);
         navigate("/", { replace: true });
       } catch (err) {
         setStatus({ kind: "error", message: (err as Error).message });

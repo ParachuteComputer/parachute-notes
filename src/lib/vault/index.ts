@@ -1,3 +1,4 @@
+export * from "./auth-halt-store";
 export * from "./client";
 export * from "./discovery";
 export * from "./graph";
