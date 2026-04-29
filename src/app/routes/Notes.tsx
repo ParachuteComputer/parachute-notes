@@ -248,7 +248,7 @@ export function Notes({ preset }: { preset?: NotesPreset } = {}) {
         </div>
       </header>
 
-      {!preset && pinnedTags.length > 0 ? (
+      {!preset ? (
         <PinnedTagsStrip
           pinnedTags={pinnedTags}
           tagCounts={tags.data ?? []}
@@ -741,6 +741,20 @@ function PinnedTagsStrip({
 }) {
   const countFor = (name: string) =>
     tagCounts.find((t) => t.name.toLowerCase() === name.toLowerCase())?.count;
+  if (pinnedTags.length === 0) {
+    return (
+      <nav aria-label="Pinned tags" className="mb-6 flex flex-wrap items-center gap-2">
+        <span className="text-xs uppercase tracking-wider text-fg-dim">Pinned tags</span>
+        <span className="text-xs text-fg-dim">
+          Pin tags here for quick access —{" "}
+          <Link to="/tags" className="text-accent hover:underline">
+            open the tag browser
+          </Link>
+          .
+        </span>
+      </nav>
+    );
+  }
   return (
     <nav aria-label="Pinned tags" className="mb-6 flex flex-wrap items-center gap-2">
       <span className="text-xs uppercase tracking-wider text-fg-dim">Pinned tags</span>
