@@ -46,12 +46,18 @@ function NotesIndex() {
   return activeVault ? <Notes /> : <Home />;
 }
 
-// Bare fallback while a lazy route's chunk loads. Routes are tiny once split,
-// so the network round-trip is usually invisible — we don't want a spinner
-// flashing on every nav. An empty placeholder reserves the main column without
-// jumping the layout.
+// Fallback while a lazy route's chunk loads. Routes are tiny once split, so
+// the round-trip is usually invisible — but if the network stalls (slow PWA
+// cold-start, offline-with-stale-SW, throttled mobile) the user needs *some*
+// signal that the app is doing work. `role="status"` makes screen readers
+// announce the change politely; the visible "Loading…" matches what sighted
+// users see, so both audiences get the same affordance.
 function RouteFallback() {
-  return <div aria-busy="true" />;
+  return (
+    <output className="mx-auto block max-w-5xl px-6 py-10 text-center text-sm text-fg-dim">
+      Loading…
+    </output>
+  );
 }
 
 // Shim for pre-mount external bookmarks. When the app lived at the origin root,
