@@ -64,8 +64,12 @@ describe("App", () => {
     // The `*` route navigates to internal `/`. With basename=/notes this is
     // external /notes (with or without trailing slash — both resolve the root
     // list). The bug Aaron hit (/notes/notes) would surface here if basename
-    // and route paths disagreed.
-    expect(window.location.pathname).toMatch(/^\/notes\/?$/);
+    // and route paths disagreed. Routes are lazy now, so the redirect chain
+    // (`/:id` → NoteView → "/") settles across a Suspense boundary instead of
+    // synchronously — wait for the URL to land.
+    return waitFor(() => {
+      expect(window.location.pathname).toMatch(/^\/notes\/?$/);
+    });
   });
 
   it("clamps horizontal overflow at the shell so a stray wide descendant can't scroll the viewport", () => {
@@ -104,7 +108,9 @@ describe("App", () => {
     // routing must hold `/settings` (and every other named static route)
     // above the `/:id` pre-#49 bookmark shim. If this ever fails, the shim
     // would start swallowing real internal pages.
-    expect(screen.getByRole("heading", { level: 1, name: /settings/i })).toBeInTheDocument();
-    expect(window.location.pathname).toBe("/notes/settings");
+    return waitFor(() => {
+      expect(screen.getByRole("heading", { level: 1, name: /settings/i })).toBeInTheDocument();
+      expect(window.location.pathname).toBe("/notes/settings");
+    });
   });
 });

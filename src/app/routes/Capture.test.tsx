@@ -26,6 +26,24 @@ const fakeState = {
   pickResult: "audio/webm;codecs=opus" as string | null,
 };
 
+// Toggle to make the next `enqueue` call throw — used by the catch-path
+// regression test to simulate a failed save and verify the savingRef leak fix.
+const enqueueState = vi.hoisted(() => ({ failNext: false }));
+
+vi.mock("@/lib/sync", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/sync")>("@/lib/sync");
+  return {
+    ...actual,
+    enqueue: async (...args: Parameters<typeof actual.enqueue>) => {
+      if (enqueueState.failNext) {
+        enqueueState.failNext = false;
+        throw new Error("simulated enqueue failure");
+      }
+      return actual.enqueue(...args);
+    },
+  };
+});
+
 vi.mock("@/lib/capture/recorder", async () => {
   const actual =
     await vi.importActual<typeof import("@/lib/capture/recorder")>("@/lib/capture/recorder");
@@ -391,6 +409,122 @@ describe("Capture (unified)", () => {
     if (rows[0]?.mutation.kind === "create-note") {
       expect(rows[0].mutation.payload.content).toBe("walked away mid-thought");
       expect(rows[0].mutation.payload.tags).toEqual(["quick"]);
+    }
+    db.close();
+  });
+
+  it("unmount fired during save() does not double-enqueue (#95)", async () => {
+    // Race: user types, hits Capture, then immediately navigates away while
+    // the enqueue is still in flight. save() already started the create-note
+    // enqueue; the unmount-flush must not fire a second one.
+    function Toggler() {
+      const [mounted, setMounted] = useState(true);
+      return (
+        <>
+          <button type="button" onClick={() => setMounted(false)}>
+            unmount
+          </button>
+          {mounted ? <Capture /> : <div>unmounted</div>}
+        </>
+      );
+    }
+    render(
+      <MemoryRouter>
+        <Toggler />
+      </MemoryRouter>,
+      { wrapper: Wrapper },
+    );
+    await waitFor(() => {
+      expect(screen.getByLabelText(/capture content/i)).toBeInTheDocument();
+    });
+    const textarea = screen.getByLabelText(/capture content/i) as HTMLTextAreaElement;
+    await act(async () => {
+      fireEvent.change(textarea, { target: { value: "racing the unmount" } });
+    });
+    // Click Capture and unmount in the same act() — both effects flush before
+    // the test reads the queue, so we observe whatever both code paths
+    // enqueue. With the bug, that's two rows.
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /^capture$/i }));
+      fireEvent.click(screen.getByRole("button", { name: "unmount" }));
+    });
+    await waitFor(() => {
+      expect(screen.getByText("unmounted")).toBeInTheDocument();
+    });
+    const db = await openLensDB();
+    const rows = await listPending(db, "dev");
+    expect(rows.length).toBe(1);
+    db.close();
+  });
+
+  it("failed save releases savingRef so a later unmount-flush still flushes the draft (#96 follow-up)", async () => {
+    // Regression for the savingRef leak on the catch path: if save() failed
+    // (network/quota/whatever) and the user kept editing then navigated away,
+    // the unmount-flush would bail unconditionally and silently drop the
+    // draft. After the fix, savingRef resets in the catch block so the
+    // unmount-flush still enqueues the latest content.
+    function Toggler() {
+      const [mounted, setMounted] = useState(true);
+      return (
+        <>
+          <button type="button" onClick={() => setMounted(false)}>
+            unmount
+          </button>
+          {mounted ? <Capture /> : <div>unmounted</div>}
+        </>
+      );
+    }
+    render(
+      <MemoryRouter>
+        <Toggler />
+      </MemoryRouter>,
+      { wrapper: Wrapper },
+    );
+    await waitFor(() => {
+      expect(screen.getByLabelText(/capture content/i)).toBeInTheDocument();
+    });
+    const textarea = screen.getByLabelText(/capture content/i) as HTMLTextAreaElement;
+
+    enqueueState.failNext = true;
+    await act(async () => {
+      fireEvent.change(textarea, { target: { value: "first attempt" } });
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /^capture$/i }));
+    });
+    await waitFor(() => {
+      expect(useToastStore.getState().toasts.some((t) => t.tone === "error")).toBe(true);
+    });
+
+    // Save failed — the queue should still be empty.
+    {
+      const db = await openLensDB();
+      const rows = await listPending(db, "dev");
+      expect(rows.length).toBe(0);
+      db.close();
+    }
+
+    // Type more after the failure, then navigate away. The unmount-flush
+    // should fire because savingRef was released in the catch block.
+    await act(async () => {
+      fireEvent.change(textarea, { target: { value: "kept typing after failure" } });
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "unmount" }));
+    });
+    await waitFor(() => {
+      expect(screen.getByText("unmounted")).toBeInTheDocument();
+    });
+    await waitFor(async () => {
+      const db = await openLensDB();
+      const rows = await listPending(db, "dev");
+      db.close();
+      expect(rows.length).toBe(1);
+    });
+    const db = await openLensDB();
+    const rows = await listPending(db, "dev");
+    if (rows[0]?.mutation.kind === "create-note") {
+      expect(rows[0].mutation.payload.content).toBe("kept typing after failure");
     }
     db.close();
   });

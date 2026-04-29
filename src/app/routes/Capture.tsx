@@ -77,6 +77,11 @@ export function Capture() {
   const recorderRef = useRef<RecorderController | null>(null);
   const previewUrlRef = useRef<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  // Set synchronously by save() before any await so an unmount that fires in
+  // the same tick (user hits Capture and immediately navigates) can detect
+  // an in-flight enqueue and skip the unmount-flush. A render-tracked phase
+  // ref isn't enough — React may not re-render before the unmount.
+  const savingRef = useRef(false);
 
   // Tick the elapsed display while recording.
   useEffect(() => {
@@ -198,6 +203,7 @@ export function Capture() {
       return;
     }
     const audio = phase.kind === "have-audio" ? phase : null;
+    savingRef.current = true;
     setPhase({ kind: "saving" });
 
     const explicitTags = tags.filter((t) => t.length > 0);
@@ -281,6 +287,11 @@ export function Capture() {
       reset();
     } catch (e) {
       pushToast(e instanceof Error ? `Capture failed: ${e.message}` : "Capture failed.", "error");
+      // Save failed — release the in-flight flag so the unmount-flush will
+      // still flush a draft if the user edits more text and navigates away.
+      // Without this, a single failed save would silently swallow every
+      // subsequent draft on the same mount.
+      savingRef.current = false;
       // Restore the audio buffer so the user can retry without re-recording.
       if (audio) {
         setPhase({
@@ -326,10 +337,14 @@ export function Capture() {
   // so a tab switch never lost work. Preserve that for the unified surface.
   // Audio in `have-audio` is intentionally *not* flushed — it's bigger, and
   // saving an attachment without the user clicking Capture feels wrong.
+  // savingRef is checked here so a teardown that fires in the same tick as a
+  // Capture click (user hits Capture and immediately navigates) sees that
+  // save() is already in flight and bails — otherwise we'd enqueue twice.
   const latest = useRef({ db, activeVaultId: activeVault?.id ?? null, content, tags, roles });
   latest.current = { db, activeVaultId: activeVault?.id ?? null, content, tags, roles };
   useEffect(() => {
     return () => {
+      if (savingRef.current) return;
       const { db, activeVaultId, content, tags, roles } = latest.current;
       const text = content.trim();
       if (!text || !db || !activeVaultId) return;
