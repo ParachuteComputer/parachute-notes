@@ -33,8 +33,12 @@ export function ReconnectBanner() {
       const { authorizeUrl } = await beginOAuth(issuer, vault.scope);
       window.location.assign(authorizeUrl);
     } catch (err) {
-      setReconnecting(false);
       setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      // Reset even on success: if the browser blocks the navigation (popup
+      // blocker on a programmatic assign, content-security policy), the page
+      // doesn't unload and the button would otherwise stick at "Starting…".
+      setReconnecting(false);
     }
   }
 

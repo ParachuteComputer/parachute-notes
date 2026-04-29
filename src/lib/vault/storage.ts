@@ -1,7 +1,7 @@
 import type { PendingOAuthState, ServicesCatalog, StoredToken, VaultRecord } from "./types";
 
-const VAULTS_KEY = "lens:vaults";
-const ACTIVE_KEY = "lens:active_vault";
+export const VAULTS_KEY = "lens:vaults";
+export const ACTIVE_KEY = "lens:active_vault";
 const TOKEN_PREFIX = "lens:token:";
 const SERVICES_PREFIX = "lens:services:";
 const PENDING_OAUTH_KEY = "lens:oauth:pending";

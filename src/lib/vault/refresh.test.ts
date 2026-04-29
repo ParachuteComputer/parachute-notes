@@ -167,6 +167,25 @@ describe("forceRefresh", () => {
     expect(useAuthHaltStore.getState().byVault.v1).toBeDefined();
   });
 
+  it("does NOT mark halted on a 5xx token-endpoint response (transient — overloaded hub)", async () => {
+    seedVault({ id: "v1" });
+    seedToken("v1", { accessToken: "eyJ.stale", refreshToken: "rt_old" });
+
+    const fetchImpl = vi.fn<typeof fetch>(
+      async () =>
+        ({
+          ok: false,
+          status: 503,
+          json: async () => ({}),
+          text: async () => "service unavailable",
+        }) as Response,
+    );
+    vi.stubGlobal("fetch", fetchImpl);
+
+    expect(await forceRefresh("v1")).toBeNull();
+    expect(useAuthHaltStore.getState().byVault.v1).toBeUndefined();
+  });
+
   it("does NOT mark halted on a network-level error (transient — let the next tick retry)", async () => {
     seedVault({ id: "v1" });
     seedToken("v1", { accessToken: "eyJ.stale", refreshToken: "rt_old" });

@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { AUTH_HALT_KEY_PREFIX, useAuthHaltStore } from "./auth-halt-store";
-import { loadActiveVaultId, loadVaults } from "./storage";
+import { ACTIVE_KEY, loadActiveVaultId, loadVaults, VAULTS_KEY } from "./storage";
 import { useVaultStore } from "./store";
 
 // Storage events fire across same-origin tabs but never within the tab that
@@ -16,9 +16,6 @@ import { useVaultStore } from "./store";
 //                            (QuickSwitchMount etc.) react via existing hooks)
 //   - lens:auth-halt:<id>   (per-vault auth halt; reload entire halt store
 //                            because there's no per-key removal in zustand)
-
-const VAULTS_KEY = "lens:vaults";
-const ACTIVE_KEY = "lens:active_vault";
 
 export function useCrossTabVaultSync(): void {
   useEffect(() => {
