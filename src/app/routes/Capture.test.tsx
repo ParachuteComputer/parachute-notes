@@ -395,6 +395,50 @@ describe("Capture (unified)", () => {
     db.close();
   });
 
+  it("unmount fired during save() does not double-enqueue (#95)", async () => {
+    // Race: user types, hits Capture, then immediately navigates away while
+    // the enqueue is still in flight. save() already started the create-note
+    // enqueue; the unmount-flush must not fire a second one.
+    function Toggler() {
+      const [mounted, setMounted] = useState(true);
+      return (
+        <>
+          <button type="button" onClick={() => setMounted(false)}>
+            unmount
+          </button>
+          {mounted ? <Capture /> : <div>unmounted</div>}
+        </>
+      );
+    }
+    render(
+      <MemoryRouter>
+        <Toggler />
+      </MemoryRouter>,
+      { wrapper: Wrapper },
+    );
+    await waitFor(() => {
+      expect(screen.getByLabelText(/capture content/i)).toBeInTheDocument();
+    });
+    const textarea = screen.getByLabelText(/capture content/i) as HTMLTextAreaElement;
+    await act(async () => {
+      fireEvent.change(textarea, { target: { value: "racing the unmount" } });
+    });
+    // Click Capture and unmount in the same act() — both effects flush before
+    // the test reads the queue, so we observe whatever both code paths
+    // enqueue. With the bug, that's two rows.
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /^capture$/i }));
+      fireEvent.click(screen.getByRole("button", { name: "unmount" }));
+    });
+    await waitFor(() => {
+      expect(screen.getByText("unmounted")).toBeInTheDocument();
+    });
+    const db = await openLensDB();
+    const rows = await listPending(db, "dev");
+    expect(rows.length).toBe(1);
+    db.close();
+  });
+
   it("unmount with empty content does NOT enqueue", async () => {
     function Toggler() {
       const [mounted, setMounted] = useState(true);
