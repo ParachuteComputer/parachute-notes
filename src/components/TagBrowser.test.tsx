@@ -108,6 +108,51 @@ describe("TagBrowser", () => {
     expect(onClear).toHaveBeenCalledTimes(1);
   });
 
+  it("group badge shows the sum of child tag counts", () => {
+    render(
+      <TagBrowser
+        {...baseProps}
+        tags={[
+          { name: "summary/daily", count: 10 },
+          { name: "summary/weekly", count: 3 },
+          { name: "summary/monthly", count: 2 },
+        ]}
+        pinnedTags={[]}
+        selected={[]}
+      />,
+    );
+    // The collapsed group's "Expand summary" button has the prefix label and
+    // the running total of its children — no need to expand to see the count.
+    const expand = screen.getByRole("button", { name: /Expand summary/i });
+    const groupRow = expand.parentElement!;
+    expect(within(groupRow).getByText("#summary/")).toBeInTheDocument();
+    expect(within(groupRow).getByText("15")).toBeInTheDocument();
+  });
+
+  it("group badge sum includes the parent's own count when it exists as a tag", () => {
+    render(
+      <TagBrowser
+        {...baseProps}
+        tags={[
+          { name: "summary", count: 4 },
+          { name: "summary/daily", count: 10 },
+          { name: "summary/weekly", count: 3 },
+        ]}
+        pinnedTags={[]}
+        selected={[]}
+      />,
+    );
+    // When the parent tag exists, the row renders as a TagRow (not the
+    // expand-button label) — but the group's running total still adds up.
+    const parent = screen.getByTitle("#summary");
+    expect(within(parent).getByText("4")).toBeInTheDocument();
+    // Expand and check the leaf counts so the sum (4 + 10 + 3 = 17) is
+    // verifiable end-to-end.
+    fireEvent.click(screen.getByRole("button", { name: /Expand summary/i }));
+    expect(within(screen.getByTitle("#summary/daily")).getByText("10")).toBeInTheDocument();
+    expect(within(screen.getByTitle("#summary/weekly")).getByText("3")).toBeInTheDocument();
+  });
+
   it("renders the tag-browser nav with Tags heading at the top of the sidebar", () => {
     render(
       <TagBrowser

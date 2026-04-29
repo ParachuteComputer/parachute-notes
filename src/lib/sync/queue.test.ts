@@ -694,6 +694,42 @@ describe("drain — update-settings (merge-on-409 invariant)", () => {
     expect(call[1].if_updated_at).toBe("t1");
   });
 
+  it("drops a queued op whose notePath has been migrated and warns once", async () => {
+    // Simulate an op that was enqueued during the brief Lens-rebrand window
+    // (`.parachute/lens/settings`) and persisted across the revert. The drain
+    // must not write to the legacy note: it drops the row with a warning so
+    // the user's next save lands at the current path.
+    const getNote = vi.fn(async () => null);
+    const updateNote = vi.fn(
+      async (id: string) => ({ id, createdAt: "t0", updatedAt: "t1" }) as Note,
+    );
+    const createNote = vi.fn(async () => ({ id: "srv", createdAt: "t1" }) as Note);
+    const client = makeClient({ getNote, updateNote, createNote });
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    await enqueue(
+      db,
+      {
+        kind: "update-settings",
+        notePath: ".parachute/lens/settings",
+        patch: { tagRoles: { pinned: "fav" } },
+        baselineUpdatedAt: null,
+      },
+      { vaultId: "v1" },
+    );
+
+    const out = await drain({ db, client, vaultId: "v1", blobStore: createIdbBlobStore(db) });
+
+    expect(out.drained).toBe(1);
+    expect(await countPending(db, "v1")).toBe(0);
+    expect(getNote).not.toHaveBeenCalled();
+    expect(updateNote).not.toHaveBeenCalled();
+    expect(createNote).not.toHaveBeenCalled();
+    expect(warnSpy).toHaveBeenCalledOnce();
+    expect(warnSpy.mock.calls[0]?.[0]).toContain(".parachute/lens/settings");
+    warnSpy.mockRestore();
+  });
+
   it("retries the merge+PATCH on 409 up to the limit, then falls back to force: true", async () => {
     // Every GET returns the same note; every PATCH 409s. The drain should
     // loop, and on the final attempt send `force: true` so the change still

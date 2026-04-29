@@ -246,12 +246,18 @@ describe("Notes route", () => {
     await waitFor(() => expect(dailyChip).toHaveAttribute("aria-pressed", "true"));
   });
 
-  it("omits the pinned-tags strip when no tags are pinned", async () => {
+  it("renders a first-run hint in the pinned-tags strip when no tags are pinned", async () => {
     installFetch({ notes: [], tags: [{ name: "daily", count: 2 }] });
     render(<Notes />, { wrapper: Wrapper });
     await screen.findByRole("list", { name: "Notes" }).catch(() => null);
-    // The sidebar tag browser renders #daily too — scope to the strip.
-    expect(screen.queryByRole("navigation", { name: /pinned tags/i })).not.toBeInTheDocument();
+    const strip = await screen.findByRole("navigation", { name: /pinned tags/i });
+    expect(within(strip).getByText(/Pin tags here for quick access/i)).toBeInTheDocument();
+    expect(within(strip).getByRole("link", { name: /open the tag browser/i })).toHaveAttribute(
+      "href",
+      "/tags",
+    );
+    // No pinned-tag chips render in the empty state.
+    expect(within(strip).queryByRole("button", { name: /^#/i })).not.toBeInTheDocument();
   });
 
   it("hides archived notes by default and shows them when toggled on", async () => {
