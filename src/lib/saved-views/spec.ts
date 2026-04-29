@@ -23,6 +23,10 @@ export interface SavedView {
   name: string;
   filters: SavedViewFilters;
   description?: string;
+  // Carried so rename / update mutations can send `if_updated_at` and avoid
+  // clobbering a peer's edit. Optional because a view note that's never been
+  // touched after creation may not have one.
+  updatedAt?: string;
 }
 
 // Build the canonical metadata blob the vault stores. Only emit fields
@@ -58,6 +62,7 @@ export function decodeView(note: Note): SavedView | null {
       sort: f.sort === "asc" ? "asc" : f.sort === "desc" ? "desc" : undefined,
       showArchived: f.showArchived === true,
     },
+    updatedAt: note.updatedAt,
   };
 }
 

@@ -3,7 +3,13 @@ import { TagBrowser } from "@/components/TagBrowser";
 import { normalizeTag } from "@/components/TagEditor";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { meetsAutoThreshold, usePathTreeMode } from "@/lib/path-tree";
-import { useSaveView, useSavedViews } from "@/lib/saved-views/queries";
+import {
+  useDeleteView,
+  useRenameView,
+  useSaveView,
+  useSavedViews,
+  useUpdateView,
+} from "@/lib/saved-views/queries";
 import {
   type SavedView,
   type SavedViewFilters,
@@ -138,8 +144,12 @@ export function Notes({ preset }: { preset?: NotesPreset } = {}) {
   const tags = useTags();
   const savedViews = useSavedViews(roles.view);
   const saveView = useSaveView(roles.view);
+  const renameView = useRenameView();
+  const updateView = useUpdateView();
+  const deleteView = useDeleteView();
   const pushToast = useToastStore((s) => s.push);
   const [showSaveDialog, setShowSaveDialog] = useState(false);
+  const [renaming, setRenaming] = useState<SavedView | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   // Path tree: independent capped fetch (separate from the filtered list) so
@@ -181,6 +191,46 @@ export function Notes({ preset }: { preset?: NotesPreset } = {}) {
       }
     },
     [saveView, currentFilters, pushToast],
+  );
+
+  const onRenameView = useCallback(
+    async (view: SavedView, newName: string) => {
+      try {
+        await renameView.mutateAsync({ view, newName });
+        pushToast(`Renamed to "${newName}".`, "success");
+        setRenaming(null);
+      } catch (err) {
+        pushToast(`Could not rename: ${(err as Error).message}`, "error");
+      }
+    },
+    [renameView, pushToast],
+  );
+
+  const onUpdateView = useCallback(
+    async (view: SavedView) => {
+      try {
+        await updateView.mutateAsync({ view, filters: currentFilters });
+        pushToast(`Updated "${view.name}".`, "success");
+      } catch (err) {
+        pushToast(`Could not update: ${(err as Error).message}`, "error");
+      }
+    },
+    [updateView, currentFilters, pushToast],
+  );
+
+  const onDeleteView = useCallback(
+    async (view: SavedView) => {
+      // Plain confirm is consistent with the other destructive flows in this
+      // app (Vaults.tsx removal, SyncStatusPanel discard).
+      if (!confirm(`Delete saved view "${view.name}"? This can't be undone.`)) return;
+      try {
+        await deleteView.mutateAsync(view);
+        pushToast(`Deleted "${view.name}".`, "success");
+      } catch (err) {
+        pushToast(`Could not delete: ${(err as Error).message}`, "error");
+      }
+    },
+    [deleteView, pushToast],
   );
 
   // Client-side post-process: hide archived on default list unless toggled, and
@@ -296,6 +346,10 @@ export function Notes({ preset }: { preset?: NotesPreset } = {}) {
                 views={savedViews.data}
                 isPending={savedViews.isPending}
                 error={savedViews.error}
+                canUpdateWithCurrent={isFiltersNonEmpty(currentFilters)}
+                onRename={(v) => setRenaming(v)}
+                onUpdate={onUpdateView}
+                onDelete={onDeleteView}
               />
               {showFoldersAccordion ? (
                 <details
@@ -440,6 +494,16 @@ export function Notes({ preset }: { preset?: NotesPreset } = {}) {
           onSave={onSaveView}
         />
       ) : null}
+
+      {renaming ? (
+        <RenameViewDialog
+          view={renaming}
+          existing={savedViews.data ?? []}
+          isSaving={renameView.isPending}
+          onCancel={() => setRenaming(null)}
+          onSave={(name) => onRenameView(renaming, name)}
+        />
+      ) : null}
     </div>
   );
 }
@@ -448,11 +512,41 @@ function SavedViewsSidebar({
   views,
   isPending,
   error,
+  canUpdateWithCurrent,
+  onRename,
+  onUpdate,
+  onDelete,
 }: {
   views: SavedView[] | undefined;
   isPending: boolean;
   error: Error | null;
+  canUpdateWithCurrent: boolean;
+  onRename: (view: SavedView) => void;
+  onUpdate: (view: SavedView) => void;
+  onDelete: (view: SavedView) => void;
 }) {
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+
+  // Close the menu when the user clicks/taps outside or presses Escape — small
+  // dropdowns rendered inline like this don't get focus-trap behavior for free.
+  useEffect(() => {
+    if (!openMenuId) return;
+    const onDocClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (target?.closest("[data-saved-view-menu]")) return;
+      setOpenMenuId(null);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpenMenuId(null);
+    };
+    document.addEventListener("mousedown", onDocClick);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDocClick);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [openMenuId]);
+
   return (
     <aside>
       <h2 className="mb-2 text-xs uppercase tracking-wider text-fg-dim">Saved views</h2>
@@ -467,18 +561,156 @@ function SavedViewsSidebar({
       ) : (
         <ul className="space-y-1" aria-label="Saved views">
           {views.map((v) => (
-            <li key={v.id}>
+            <li
+              key={v.id}
+              className="group flex items-center rounded-md border border-transparent hover:border-border hover:bg-card"
+            >
               <Link
                 to={`/?${filtersToSearchParams(v.filters).toString()}`}
-                className="block truncate rounded-md border border-transparent px-2 py-1 text-sm text-fg-muted hover:border-border hover:bg-card hover:text-accent"
+                className="block flex-1 truncate px-2 py-1 text-sm text-fg-muted hover:text-accent"
               >
                 {v.name}
               </Link>
+              <div className="relative" data-saved-view-menu>
+                <button
+                  type="button"
+                  onClick={() => setOpenMenuId((c) => (c === v.id ? null : v.id))}
+                  aria-label={`Manage saved view ${v.name}`}
+                  aria-haspopup="menu"
+                  aria-expanded={openMenuId === v.id}
+                  className="px-2 py-1 text-fg-dim hover:text-accent"
+                >
+                  <span aria-hidden="true" className="font-mono text-xs">
+                    ⋯
+                  </span>
+                </button>
+                {openMenuId === v.id ? (
+                  <div
+                    role="menu"
+                    className="absolute right-0 top-full z-30 mt-1 w-48 overflow-hidden rounded-md border border-border bg-card shadow-lg"
+                  >
+                    <button
+                      type="button"
+                      role="menuitem"
+                      disabled={!canUpdateWithCurrent}
+                      onClick={() => {
+                        setOpenMenuId(null);
+                        onUpdate(v);
+                      }}
+                      className="block w-full px-3 py-2 text-left text-sm text-fg-muted hover:bg-bg hover:text-accent disabled:cursor-not-allowed disabled:opacity-40"
+                      title={
+                        canUpdateWithCurrent
+                          ? undefined
+                          : "Apply some filters first to update this view."
+                      }
+                    >
+                      Update with current filters
+                    </button>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        setOpenMenuId(null);
+                        onRename(v);
+                      }}
+                      className="block w-full px-3 py-2 text-left text-sm text-fg-muted hover:bg-bg hover:text-accent"
+                    >
+                      Rename…
+                    </button>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        setOpenMenuId(null);
+                        onDelete(v);
+                      }}
+                      className="block w-full border-t border-border px-3 py-2 text-left text-sm text-red-400 hover:bg-bg"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                ) : null}
+              </div>
             </li>
           ))}
         </ul>
       )}
     </aside>
+  );
+}
+
+function RenameViewDialog({
+  view,
+  existing,
+  isSaving,
+  onCancel,
+  onSave,
+}: {
+  view: SavedView;
+  existing: SavedView[];
+  isSaving: boolean;
+  onCancel: () => void;
+  onSave: (name: string) => void;
+}) {
+  const [name, setName] = useState(view.name);
+  const trimmed = name.trim();
+  // Same-name (no-op) is allowed-but-disabled — it's just clutter to send a
+  // rename that doesn't change anything. Collision check skips the view itself
+  // so re-typing its current name doesn't read as a collision.
+  const collides = existing.some(
+    (v) => v.id !== view.id && v.name.toLowerCase() === trimmed.toLowerCase(),
+  );
+  const unchanged = trimmed === view.name;
+  const canSave = trimmed.length > 0 && !collides && !unchanged && !isSaving;
+
+  return (
+    <div
+      className="fixed inset-0 z-40 flex items-center justify-center bg-black/60 p-4"
+      // biome-ignore lint/a11y/useSemanticElements: native <dialog> requires imperative showModal()/close(); we want declarative open=!!renaming
+      role="dialog"
+      aria-modal="true"
+      aria-label="Rename view"
+    >
+      <div className="w-full max-w-sm rounded-md border border-border bg-card p-5">
+        <h3 className="mb-3 font-serif text-lg text-fg">Rename view</h3>
+        <label className="block text-sm">
+          <span className="mb-1 block text-fg-muted">Name</span>
+          <input
+            type="text"
+            value={name}
+            // biome-ignore lint/a11y/noAutofocus: dialog focus
+            autoFocus
+            onChange={(e) => setName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && canSave) onSave(trimmed);
+              if (e.key === "Escape") onCancel();
+            }}
+            aria-label="View name"
+            className="w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-fg focus:border-accent focus:outline-none"
+          />
+        </label>
+        {collides ? (
+          <p className="mt-2 text-xs text-red-400">A view with that name already exists.</p>
+        ) : null}
+        <div className="mt-4 flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={onCancel}
+            className="min-h-11 rounded-md border border-border px-3 py-1.5 text-sm text-fg-muted hover:text-accent"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={() => canSave && onSave(trimmed)}
+            disabled={!canSave}
+            className="min-h-11 rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-40"
+          >
+            {isSaving ? "Saving…" : "Save"}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
