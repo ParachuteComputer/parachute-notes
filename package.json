@@ -1,6 +1,6 @@
 {
   "name": "@openparachute/notes",
-  "version": "0.3.8-rc.1",
+  "version": "0.3.9-rc.1",
   "private": false,
   "type": "module",
   "description": "Parachute Notes — the default frontend for Parachute. Browse, edit, and capture in any Parachute Vault.",
