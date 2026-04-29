@@ -1,7 +1,7 @@
 import { QuickSwitch } from "@/components/QuickSwitch";
 import { useQuickSwitchOpen } from "@/lib/quick-switch/open-store";
 import { useVaultStore } from "@/lib/vault";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 
 // Global Cmd/Ctrl+K listener + conditional mount of the switcher. Kept
 // separate from the switcher itself so tests can render just the dialog
@@ -15,7 +15,7 @@ export function QuickSwitchMount() {
   const open = useQuickSwitchOpen((s) => s.open);
   const setOpen = useQuickSwitchOpen((s) => s.setOpen);
   const toggle = useQuickSwitchOpen((s) => s.toggle);
-  const hasActiveVault = useVaultStore((s) => s.activeVaultId !== null);
+  const activeVaultId = useVaultStore((s) => s.activeVaultId);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -30,6 +30,18 @@ export function QuickSwitchMount() {
     return () => window.removeEventListener("keydown", onKey);
   }, [toggle]);
 
-  if (!open || !hasActiveVault) return null;
+  // Reset open state on vault switch — otherwise the switcher pops back open
+  // against the new vault's notes mid-transition, which never matches what
+  // the user was looking at. Skip the initial mount so the open state isn't
+  // clobbered before the user has had a chance to interact.
+  const lastVaultId = useRef(activeVaultId);
+  useEffect(() => {
+    if (lastVaultId.current !== activeVaultId) {
+      lastVaultId.current = activeVaultId;
+      setOpen(false);
+    }
+  }, [activeVaultId, setOpen]);
+
+  if (!open || activeVaultId === null) return null;
   return <QuickSwitch onClose={() => setOpen(false)} />;
 }

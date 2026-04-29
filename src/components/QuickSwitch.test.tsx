@@ -217,4 +217,49 @@ describe("QuickSwitchMount", () => {
     fireEvent.keyDown(window, { key: "k" });
     expect(screen.queryByLabelText(/quick switch query/i)).not.toBeInTheDocument();
   });
+
+  it("closes the switcher when the active vault changes", async () => {
+    installFetch([]);
+    useVaultStore.setState({
+      vaults: {
+        v1: {
+          id: "v1",
+          url: "http://localhost:1940",
+          name: "default",
+          issuer: "http://localhost:1940",
+          clientId: "c",
+          scope: "full",
+          addedAt: "2026-04-18T00:00:00.000Z",
+          lastUsedAt: "2026-04-18T00:00:00.000Z",
+        },
+        v2: {
+          id: "v2",
+          url: "http://localhost:1940",
+          name: "second",
+          issuer: "http://localhost:1940",
+          clientId: "c",
+          scope: "full",
+          addedAt: "2026-04-18T00:00:00.000Z",
+          lastUsedAt: "2026-04-18T00:00:00.000Z",
+        },
+      },
+      activeVaultId: "v1",
+    });
+    render(
+      <Wrap>
+        <QuickSwitchMount />
+      </Wrap>,
+    );
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "k", metaKey: true });
+    });
+    expect(screen.getByLabelText(/quick switch query/i)).toBeInTheDocument();
+
+    await act(async () => {
+      useVaultStore.setState({ activeVaultId: "v2" });
+    });
+
+    expect(screen.queryByLabelText(/quick switch query/i)).not.toBeInTheDocument();
+    expect(useQuickSwitchOpen.getState().open).toBe(false);
+  });
 });
