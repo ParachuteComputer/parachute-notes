@@ -1,7 +1,7 @@
 import { useVaultStore } from "@/lib/vault/store";
 import { render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { App } from "./App";
+import { App, RouteFallback } from "./App";
 
 function stubFetch() {
   vi.stubGlobal(
@@ -84,6 +84,52 @@ describe("App", () => {
     const shell = screen.getByRole("link", { name: /parachute notes/i }).closest("div.min-h-dvh");
     expect(shell).not.toBeNull();
     expect(shell?.className).toMatch(/\boverflow-x-hidden\b/);
+  });
+
+  it("RouteFallback exposes role=status with aria-live=polite and visible text (#100)", () => {
+    // Smoke test for the a11y contract of the Suspense fallback (#99/#100).
+    // `<output>` carries an implicit role="status"; we layer on an explicit
+    // `aria-live="polite"` because NVDA on Windows has historically
+    // inconsistent support for the implicit form. If either the role or the
+    // live-region attribute regresses, screen-reader users would lose the
+    // "the app is working on it" announcement during a slow lazy-chunk
+    // fetch — silent loading is the failure mode this guards against.
+    render(<RouteFallback />);
+    const status = screen.getByRole("status");
+    expect(status).toHaveAttribute("aria-live", "polite");
+    expect(status).toHaveTextContent(/loading/i);
+  });
+
+  it("RouteFallback is mounted while a lazy route resolves (#100)", async () => {
+    // Companion check: the contract above only matters if the App actually
+    // hands rendering to RouteFallback during a lazy-route transition.
+    // /settings is route-split (lazy import in App.tsx), so the very first
+    // synchronous render at /notes/settings paints the fallback before the
+    // chunk's promise settles. Wait for the lazy chunk to land afterwards
+    // to keep the test isolated from later assertions.
+    useVaultStore.setState({
+      vaults: {
+        v1: {
+          id: "v1",
+          url: "http://localhost:1940",
+          name: "default",
+          issuer: "http://localhost:1940",
+          clientId: "c",
+          scope: "full",
+          addedAt: "2026-04-29T00:00:00.000Z",
+          lastUsedAt: "2026-04-29T00:00:00.000Z",
+        },
+      },
+      activeVaultId: "v1",
+    });
+    window.history.replaceState({}, "", "/notes/settings");
+    render(<App />);
+    const status = screen.getByRole("status");
+    expect(status).toHaveAttribute("aria-live", "polite");
+    expect(status).toHaveTextContent(/loading/i);
+    await waitFor(() => {
+      expect(screen.getByRole("heading", { level: 1, name: /settings/i })).toBeInTheDocument();
+    });
   });
 
   it("static route /settings wins over the dynamic /:id deep-link shim", () => {

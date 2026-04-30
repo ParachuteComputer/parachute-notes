@@ -49,12 +49,18 @@ function NotesIndex() {
 // Fallback while a lazy route's chunk loads. Routes are tiny once split, so
 // the round-trip is usually invisible — but if the network stalls (slow PWA
 // cold-start, offline-with-stale-SW, throttled mobile) the user needs *some*
-// signal that the app is doing work. `role="status"` makes screen readers
-// announce the change politely; the visible "Loading…" matches what sighted
-// users see, so both audiences get the same affordance.
-function RouteFallback() {
+// signal that the app is doing work. `<output>` carries an implicit
+// `role="status"`; we set `aria-live="polite"` explicitly because NVDA on
+// Windows has historically inconsistent support for the implicit form, and
+// the rest of the codebase (Toaster) already pairs status with explicit
+// aria-live. The visible "Loading…" matches what sighted users see, so both
+// audiences get the same affordance.
+export function RouteFallback() {
   return (
-    <output className="mx-auto block max-w-5xl px-6 py-10 text-center text-sm text-fg-dim">
+    <output
+      aria-live="polite"
+      className="mx-auto block max-w-5xl px-6 py-10 text-center text-sm text-fg-dim"
+    >
       Loading…
     </output>
   );
