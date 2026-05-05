@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.3.11 (2026-05-04)
+## 0.3.11 (2026-05-05)
 
 First `@latest` publish since launch (`0.3.0`). Bundles every change merged
 since launch into a single tagged release plus the discovery-protocol fix
