@@ -53,7 +53,7 @@ describe("buildServiceInfo", () => {
 });
 
 describe("infoEndpointPlugin", () => {
-  it("emits .parachute/info.json into the bundle on build", () => {
+  it("emits .parachute/info into the bundle on build (no .json — matches hub's discovery contract)", () => {
     const plugin = infoEndpointPlugin({ basePath: "/notes", ...exampleInfo });
     const emitted: Array<{ type: string; fileName?: string; source?: string | Uint8Array }> = [];
     const ctx = {
@@ -72,12 +72,12 @@ describe("infoEndpointPlugin", () => {
       true,
     );
     expect(emitted).toHaveLength(1);
-    expect(emitted[0]?.fileName).toBe(".parachute/info.json");
+    expect(emitted[0]?.fileName).toBe(".parachute/info");
     const parsed = JSON.parse(String(emitted[0]?.source));
     expect(parsed).toEqual(exampleInfo);
   });
 
-  it("serves the same JSON via dev server middleware at basePath/.parachute/info.json", () => {
+  it("registers middleware at both /notes/.parachute/info and root /.parachute/info — beats the SPA catch-all that would otherwise serve index.html", () => {
     const plugin = infoEndpointPlugin({ basePath: "/notes", ...exampleInfo });
     const uses: Array<{ path: string; handler: (req: unknown, res: MockRes) => void }> = [];
     const fakeServer = {
@@ -93,14 +93,43 @@ describe("infoEndpointPlugin", () => {
     // biome-ignore lint/suspicious/noExplicitAny: ViteDevServer surface isn't worth typing for a smoke test
     configure.call(plugin as any, fakeServer as any);
 
-    expect(uses).toHaveLength(1);
-    expect(uses[0]?.path).toBe("/notes/.parachute/info.json");
+    expect(uses.map((u) => u.path).sort()).toEqual(["/.parachute/info", "/notes/.parachute/info"]);
+
+    for (const use of uses) {
+      const res = new MockRes();
+      use.handler({}, res);
+      expect(res.statusCode).toBe(200);
+      expect(res.headers["Content-Type"]).toMatch(/application\/json/);
+      expect(JSON.parse(res.body)).toEqual(exampleInfo);
+    }
+  });
+
+  it("response shape matches the hub discovery contract — name, displayName, tagline, version, kind", () => {
+    const plugin = infoEndpointPlugin({ basePath: "/notes", ...exampleInfo });
+    const captured: { path: string; handler: (req: unknown, res: MockRes) => void }[] = [];
+    const fakeServer = {
+      middlewares: {
+        use(path: string, handler: (req: unknown, res: MockRes) => void) {
+          captured.push({ path, handler });
+        },
+      },
+      httpServer: null,
+    };
+    const configurePreview = plugin.configurePreviewServer;
+    if (typeof configurePreview !== "function") throw new Error("configurePreviewServer missing");
+    // biome-ignore lint/suspicious/noExplicitAny: PreviewServer surface isn't worth typing for a smoke test
+    configurePreview.call(plugin as any, fakeServer as any);
+    const rooted = captured.find((u) => u.path === "/.parachute/info");
+    if (!rooted) throw new Error("expected root middleware to be registered");
 
     const res = new MockRes();
-    uses[0]?.handler({}, res);
-    expect(res.statusCode).toBe(200);
-    expect(res.headers["Content-Type"]).toMatch(/application\/json/);
-    expect(JSON.parse(res.body)).toEqual(exampleInfo);
+    rooted.handler({}, res);
+    const parsed = JSON.parse(res.body);
+    expect(parsed.name).toBe("parachute-notes");
+    expect(parsed.displayName).toBe("Notes");
+    expect(parsed.tagline).toBeTypeOf("string");
+    expect(parsed.version).toBeTypeOf("string");
+    expect(parsed.kind).toBe("frontend");
   });
 });
 

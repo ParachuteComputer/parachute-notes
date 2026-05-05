@@ -19,25 +19,34 @@ interface PluginOptions extends ServiceInfo {
   basePath: string;
 }
 
-const ENDPOINT = ".parachute/info.json";
+const ENDPOINT = ".parachute/info";
 
-// Synthesize the `/.parachute/info.json` endpoint that the hub page reads to
-// render service cards. We don't commit a placeholder file in `public/`
-// because `version` has to come from `package.json` at build time — keeping
-// it dynamic avoids drift between the package version and the served value.
+// Synthesize the `/.parachute/info` endpoint that the hub's well-known
+// builder reads to discover modules and render service cards. We don't commit
+// a placeholder file in `public/` because `version` has to come from
+// `package.json` at build time — keeping it dynamic avoids drift between the
+// package version and the served value.
+//
+// The middleware is registered at BOTH the basePath-prefixed path (e.g.
+// `/notes/.parachute/info`) and the root (`/.parachute/info`) — hub probes
+// some modules at root, and we'd otherwise fall through to the SPA index.html
+// catch-all and return HTML.
 export function infoEndpointPlugin(options: PluginOptions): Plugin {
   const { basePath, ...info } = options;
   const body = `${JSON.stringify(info satisfies ServiceInfo, null, 2)}\n`;
   const baseWithSlash = basePath.endsWith("/") ? basePath : `${basePath}/`;
-  const servePath = `${baseWithSlash}${ENDPOINT}`;
+  const basedPath = `${baseWithSlash}${ENDPOINT}`;
+  const rootPath = `/${ENDPOINT}`;
 
   function attach(server: ViteDevServer | PreviewServer): void {
-    server.middlewares.use(servePath, (_req, res) => {
+    const handler = (_req: import("node:http").IncomingMessage, res: import("node:http").ServerResponse) => {
       res.statusCode = 200;
       res.setHeader("Content-Type", "application/json; charset=utf-8");
       res.setHeader("Cache-Control", "no-cache");
       res.end(body);
-    });
+    };
+    server.middlewares.use(basedPath, handler);
+    if (rootPath !== basedPath) server.middlewares.use(rootPath, handler);
   }
 
   return {
