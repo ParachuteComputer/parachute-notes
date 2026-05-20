@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.3.15] - 2026-05-20
+## 0.3.15 (2026-05-20)
 
 Stable release. Cumulative changes since `0.3.14`:
 
