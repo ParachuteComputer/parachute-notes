@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.3.15 (2026-05-20)
+
+Stable release. Cumulative changes since `0.3.14`:
+
+- **Format-aware rendering Phase 2** (#139): native rendering for CSV (table), JSON (pretty-print), YAML (formatted), code (syntax-highlighted) note bodies. Auto-detected by content type.
+- **Hierarchical capture** (#134, others): autosave draft model + text-size global zoom + capture-flow polish across multiple rc.10-rc.13 iterations.
+- **Cross-tab sync** (#131, others): notes edited in one tab reflect in others within seconds.
+- **Schema-audit UI** (#136): surface vault schema state from the notes UI.
+- **Pending-approval render polish** (#140): dropped the CLI alternative from the OAuth pending-approval screen — the web-based approval path is now the only displayed path. Added "Retry now" button that navigates back to `/add` (works correctly with single-use OAuth codes).
+
+See individual rc entries below for full detail.
+
 ## Unreleased
 
 ### OAuth pending-approval polish
