@@ -132,9 +132,7 @@ function safeApproveUrl(raw: unknown): string | undefined {
   return raw;
 }
 
-function parsePendingApproval(
-  text: string,
-): { approveUrl?: string; cliAlternative?: string } | null {
+function parsePendingApproval(text: string): { approveUrl?: string } | null {
   let parsed: unknown;
   try {
     parsed = JSON.parse(text);
@@ -145,39 +143,38 @@ function parsePendingApproval(
   const body = parsed as Record<string, unknown>;
   if (body.error !== "invalid_client") return null;
   const approveUrl = safeApproveUrl(body.approve_url);
-  const cliAlternative =
-    typeof body.cli_alternative === "string" ? body.cli_alternative : undefined;
-  // Only treat this as a pending-approval response when the hub provides at
-  // least one actionability hint — otherwise an unrelated `invalid_client`
-  // error (bad client_id, revoked client) would get swallowed into the
-  // friendly "needs approval" UI.
-  if (!approveUrl && !cliAlternative) return null;
-  return { approveUrl, cliAlternative };
+  // Hub still emits `cli_alternative` for terminal-comfortable operators, but
+  // Notes no longer surfaces it — the web approval path is the path now.
+  // Without an `approve_url`, we fall through to the generic error UI rather
+  // than rendering an empty "Waiting for hub approval" screen.
+  if (!approveUrl) return null;
+  return { approveUrl };
 }
 
 /**
  * Thrown by `completeOAuth` when the token endpoint answers with
  * `error: "invalid_client"` for a client that's registered but pending
- * operator approval (hub#74 / hub#240). Carries the actionability hints
+ * operator approval (hub#74 / hub#240). Carries the actionability hint
  * the hub now includes alongside the OAuth error so the UI can render a
- * one-click "approve in hub" path instead of a raw CLI message:
+ * one-click "approve in hub" path:
  *
  *   - `approveUrl` — hub-served SPA route (`/admin/approve-client/<id>`)
  *     the operator can open to approve the client inline. Same-origin to
- *     the hub. Absent on pre-#240 hubs.
- *   - `cliAlternative` — the `parachute auth approve-client <id>` shell
- *     command, retained as a fallback for terminal-comfortable operators
- *     or when `approveUrl` isn't present.
+ *     the hub. Absent on pre-#240 hubs — in which case `completeOAuth`
+ *     falls through to the generic token-exchange error rather than
+ *     surfacing a friendly screen with nothing to click.
+ *
+ * Hub still emits a `cli_alternative` shell command in the same response
+ * for terminal-comfortable operators, but Notes no longer surfaces it —
+ * the wizard-era goal is "everything from a browser."
  */
 export class PendingApprovalError extends Error {
   readonly approveUrl?: string;
-  readonly cliAlternative?: string;
 
-  constructor(approveUrl: string | undefined, cliAlternative: string | undefined) {
+  constructor(approveUrl: string | undefined) {
     super("Your hub needs to approve this app before sign-in can complete.");
     this.name = "PendingApprovalError";
     this.approveUrl = approveUrl;
-    this.cliAlternative = cliAlternative;
   }
 }
 
@@ -221,7 +218,7 @@ export async function completeOAuth(
     clearPendingOAuth();
     const pendingApproval = parsePendingApproval(text);
     if (pendingApproval) {
-      throw new PendingApprovalError(pendingApproval.approveUrl, pendingApproval.cliAlternative);
+      throw new PendingApprovalError(pendingApproval.approveUrl);
     }
     throw new Error(`Token exchange failed (${res.status}): ${text}`);
   }

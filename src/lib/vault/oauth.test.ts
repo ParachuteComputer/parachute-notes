@@ -238,7 +238,6 @@ describe("completeOAuth", () => {
   it("throws PendingApprovalError with hub#240 hints when the client is unapproved", async () => {
     savePendingOAuth(pending);
     const approveUrl = "http://localhost:1940/admin/approve-client/client-123";
-    const cliAlternative = "parachute auth approve-client client-123";
     const fetchImpl = mockFetch([
       {
         ok: false,
@@ -247,35 +246,7 @@ describe("completeOAuth", () => {
           error: "invalid_client",
           error_description: "client is registered but has not been approved by the hub operator",
           approve_url: approveUrl,
-          cli_alternative: cliAlternative,
-        }),
-      },
-    ]);
-    let caught: unknown;
-    try {
-      await completeOAuth("auth-code", "state-xyz", fetchImpl);
-    } catch (err) {
-      caught = err;
-    }
-    expect(caught).toBeInstanceOf(PendingApprovalError);
-    const e = caught as PendingApprovalError;
-    expect(e.approveUrl).toBe(approveUrl);
-    expect(e.cliAlternative).toBe(cliAlternative);
-    expect(loadPendingOAuth()).toBeNull();
-  });
-
-  it("PendingApprovalError carries cli_alternative only when older hubs omit approve_url", async () => {
-    // Back-compat: a hub running pre-#240 may emit `invalid_client` +
-    // `cli_alternative` without `approve_url`. We still surface the friendly
-    // path so Notes can render the CLI fallback rather than the raw JSON.
-    savePendingOAuth(pending);
-    const fetchImpl = mockFetch([
-      {
-        ok: false,
-        status: 401,
-        text: JSON.stringify({
-          error: "invalid_client",
-          error_description: "client pending approval",
+          // Hub still emits cli_alternative; Notes no longer reads it.
           cli_alternative: "parachute auth approve-client client-123",
         }),
       },
@@ -288,15 +259,39 @@ describe("completeOAuth", () => {
     }
     expect(caught).toBeInstanceOf(PendingApprovalError);
     const e = caught as PendingApprovalError;
-    expect(e.approveUrl).toBeUndefined();
-    expect(e.cliAlternative).toBe("parachute auth approve-client client-123");
+    expect(e.approveUrl).toBe(approveUrl);
+    expect(loadPendingOAuth()).toBeNull();
+  });
+
+  it("falls back to the generic error when invalid_client omits approve_url", async () => {
+    // Pre-#240 hubs (or any response missing approve_url) used to surface a
+    // friendly "Waiting for hub approval" screen anchored on cli_alternative.
+    // Notes no longer surfaces the CLI fallback — without an approve_url
+    // there's nothing for the user to click, so we let the generic
+    // token-exchange error render rather than show an empty friendly screen.
+    savePendingOAuth(pending);
+    const fetchImpl = mockFetch([
+      {
+        ok: false,
+        status: 401,
+        text: JSON.stringify({
+          error: "invalid_client",
+          error_description: "client pending approval",
+          cli_alternative: "parachute auth approve-client client-123",
+        }),
+      },
+    ]);
+    await expect(completeOAuth("auth-code", "state-xyz", fetchImpl)).rejects.toThrow(
+      /token exchange failed/i,
+    );
   });
 
   it("strips non-http(s) approve_url schemes (javascript: defense-in-depth)", async () => {
     // A hostile or malformed hub must not be able to land a `javascript:`
-    // URL in a React `href`. The scheme allowlist drops it; if a
-    // cli_alternative is also present, the friendly screen still renders
-    // with the CLI fallback alone.
+    // URL in a React `href`. The scheme allowlist drops it. With Notes no
+    // longer surfacing cli_alternative, a dropped approve_url means we fall
+    // through to the generic token-exchange error rather than the friendly
+    // pending-approval screen.
     savePendingOAuth(pending);
     const fetchImpl = mockFetch([
       {
@@ -310,22 +305,17 @@ describe("completeOAuth", () => {
         }),
       },
     ]);
-    let caught: unknown;
-    try {
-      await completeOAuth("auth-code", "state-xyz", fetchImpl);
-    } catch (err) {
-      caught = err;
-    }
-    expect(caught).toBeInstanceOf(PendingApprovalError);
-    const e = caught as PendingApprovalError;
-    expect(e.approveUrl).toBeUndefined();
-    expect(e.cliAlternative).toBe("parachute auth approve-client client-123");
+    await expect(completeOAuth("auth-code", "state-xyz", fetchImpl)).rejects.toThrow(
+      /token exchange failed/i,
+    );
   });
 
   it("preserves https approve_url and drops it if scheme is unparseable", async () => {
     // Trust boundary is at the hub-pointing decision, not at the URL
     // contents — any https URL the hub returns is rendered. An unparseable
-    // string is dropped via the URL constructor catch.
+    // string is dropped via the URL constructor catch, which (now that
+    // cli_alternative is no longer rendered) falls through to the generic
+    // token-exchange error.
     savePendingOAuth(pending);
     const httpsCase = mockFetch([
       {
@@ -335,7 +325,6 @@ describe("completeOAuth", () => {
           error: "invalid_client",
           error_description: "client pending approval",
           approve_url: "https://evil.example/.malicious/path",
-          cli_alternative: "parachute auth approve-client client-123",
         }),
       },
     ]);
@@ -358,20 +347,15 @@ describe("completeOAuth", () => {
           error: "invalid_client",
           error_description: "client pending approval",
           approve_url: "not a url at all",
-          cli_alternative: "parachute auth approve-client client-123",
         }),
       },
     ]);
-    let garbageCaught: unknown;
-    try {
-      await completeOAuth("auth-code", "state-xyz", garbageCase);
-    } catch (err) {
-      garbageCaught = err;
-    }
-    expect((garbageCaught as PendingApprovalError).approveUrl).toBeUndefined();
+    await expect(completeOAuth("auth-code", "state-xyz", garbageCase)).rejects.toThrow(
+      /token exchange failed/i,
+    );
   });
 
-  it("falls back to the generic error when invalid_client lacks both hint fields", async () => {
+  it("falls back to the generic error when invalid_client lacks an approve_url", async () => {
     // A bare `invalid_client` (e.g. unknown client_id, revoked client) is a
     // distinct error family from pending-approval — shouldn't get swallowed
     // into the friendly UI.

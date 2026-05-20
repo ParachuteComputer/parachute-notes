@@ -74,29 +74,28 @@ describe("OAuthCallback pending-approval rendering", () => {
     // Pinned exactly so a future edit dropping noreferrer fails loud.
     expect(link).toHaveAttribute("rel", "noopener noreferrer");
     expect(screen.getByText(/your hub admin needs to approve this app/i)).toBeInTheDocument();
-    // CLI alternative is shown as the secondary path.
-    expect(screen.getByText(/parachute auth approve-client client-123/)).toBeInTheDocument();
+    // CLI alternative is intentionally NOT surfaced — the web approval path
+    // is the path now.
+    expect(screen.queryByText(/parachute auth approve-client/)).not.toBeInTheDocument();
     // Does NOT show the raw "Connection failed" error UI.
     expect(screen.queryByText(/connection failed/i)).not.toBeInTheDocument();
   });
 
-  it("renders the CLI fallback alone when a pre-#240 hub omits approve_url", async () => {
+  it("renders a 'Retry now' button on the pending-approval screen", async () => {
     savePendingOAuth(pending);
+    const approveUrl = "http://localhost:1940/admin/approve-client/client-123";
     mockTokenResponse({
       body: JSON.stringify({
         error: "invalid_client",
         error_description: "client pending approval",
-        cli_alternative: "parachute auth approve-client client-123",
+        approve_url: approveUrl,
       }),
     });
 
     renderCallback();
 
-    await waitFor(() => {
-      expect(screen.getByText(/waiting for hub approval/i)).toBeInTheDocument();
-    });
-    expect(screen.queryByRole("link", { name: /open approval page/i })).not.toBeInTheDocument();
-    expect(screen.getByText(/parachute auth approve-client client-123/)).toBeInTheDocument();
+    const retry = await screen.findByRole("button", { name: /retry now/i });
+    expect(retry).toBeInTheDocument();
   });
 
   it("falls back to the generic 'Connection failed' UI for non-pending-approval errors", async () => {

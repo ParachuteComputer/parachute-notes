@@ -13,7 +13,7 @@ import { useNavigate, useSearchParams } from "react-router";
 type Status =
   | { kind: "working" }
   | { kind: "error"; message: string }
-  | { kind: "pending-approval"; approveUrl?: string; cliAlternative?: string };
+  | { kind: "pending-approval"; approveUrl?: string };
 
 export function OAuthCallback() {
   const [params] = useSearchParams();
@@ -79,7 +79,6 @@ export function OAuthCallback() {
           setStatus({
             kind: "pending-approval",
             approveUrl: err.approveUrl,
-            cliAlternative: err.cliAlternative,
           });
           return;
         }
@@ -110,25 +109,25 @@ export function OAuthCallback() {
             ? " Open the approval page in your hub, approve, then try again."
             : null}
         </p>
-        {status.approveUrl ? (
-          <a
-            href={status.approveUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-block rounded-md bg-accent px-4 py-2 text-sm text-white hover:bg-accent-hover"
+        <div className="flex flex-wrap items-center justify-center gap-3">
+          {status.approveUrl ? (
+            <a
+              href={status.approveUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-block rounded-md bg-accent px-4 py-2 text-sm text-white hover:bg-accent-hover"
+            >
+              Open approval page
+            </a>
+          ) : null}
+          <button
+            type="button"
+            onClick={() => window.location.reload()}
+            className="inline-block rounded-md border border-border bg-card px-4 py-2 text-sm text-fg-muted hover:text-accent"
           >
-            Open approval page
-          </a>
-        ) : null}
-        {status.cliAlternative ? (
-          <p className="mt-6 text-sm text-fg-muted">
-            Or run{" "}
-            <code className="rounded border border-border bg-card px-1.5 py-0.5 font-mono text-xs">
-              {status.cliAlternative}
-            </code>{" "}
-            from a terminal on the hub.
-          </p>
-        ) : null}
+            Retry now
+          </button>
+        </div>
         <div className="mt-8">
           <button
             type="button"
