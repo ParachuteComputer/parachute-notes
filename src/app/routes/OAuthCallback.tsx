@@ -13,7 +13,7 @@ import { useNavigate, useSearchParams } from "react-router";
 type Status =
   | { kind: "working" }
   | { kind: "error"; message: string }
-  | { kind: "pending-approval"; approveUrl?: string };
+  | { kind: "pending-approval"; approveUrl: string };
 
 export function OAuthCallback() {
   const [params] = useSearchParams();
@@ -104,37 +104,24 @@ export function OAuthCallback() {
       <div className="mx-auto max-w-xl px-6 py-24 text-center">
         <h1 className="mb-3 font-serif text-3xl">Waiting for hub approval</h1>
         <p className="mb-8 text-fg-muted">
-          Your hub admin needs to approve this app before sign-in can complete.
-          {status.approveUrl
-            ? " Open the approval page in your hub, approve, then try again."
-            : null}
+          Your hub admin needs to approve this app before sign-in can complete. Open the approval
+          page in your hub, approve, then try again.
         </p>
         <div className="flex flex-wrap items-center justify-center gap-3">
-          {status.approveUrl ? (
-            <a
-              href={status.approveUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-block rounded-md bg-accent px-4 py-2 text-sm text-white hover:bg-accent-hover"
-            >
-              Open approval page
-            </a>
-          ) : null}
-          <button
-            type="button"
-            onClick={() => window.location.reload()}
-            className="inline-block rounded-md border border-border bg-card px-4 py-2 text-sm text-fg-muted hover:text-accent"
+          <a
+            href={status.approveUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-block rounded-md bg-accent px-4 py-2 text-sm text-white hover:bg-accent-hover"
           >
-            Retry now
-          </button>
-        </div>
-        <div className="mt-8">
+            Open approval page
+          </a>
           <button
             type="button"
             onClick={() => navigate("/add", { replace: true })}
-            className="text-sm text-fg-muted underline hover:text-fg"
+            className="inline-block rounded-md border border-border bg-card px-4 py-2 text-sm text-fg-muted hover:text-accent"
           >
-            Back to connect
+            Retry now
           </button>
         </div>
       </div>

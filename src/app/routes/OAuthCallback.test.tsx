@@ -2,7 +2,7 @@ import { OAuthCallback } from "@/app/routes/OAuthCallback";
 import { savePendingOAuth } from "@/lib/vault/storage";
 import { useVaultStore } from "@/lib/vault/store";
 import type { PendingOAuthState } from "@/lib/vault/types";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -81,7 +81,12 @@ describe("OAuthCallback pending-approval rendering", () => {
     expect(screen.queryByText(/connection failed/i)).not.toBeInTheDocument();
   });
 
-  it("renders a 'Retry now' button on the pending-approval screen", async () => {
+  it("'Retry now' navigates to /add (single-use code: reload would re-redeem and 4xx)", async () => {
+    // Single-use authorization codes (RFC 6749 §4.1.2) mean a naive
+    // reload-with-same-params strategy reuses the already-redeemed code and
+    // lands the user on the generic "Connection failed" screen. Pin the
+    // navigate-to-/add behavior so a future change can't accidentally
+    // re-introduce the reload pattern.
     savePendingOAuth(pending);
     const approveUrl = "http://localhost:1940/admin/approve-client/client-123";
     mockTokenResponse({
@@ -95,7 +100,11 @@ describe("OAuthCallback pending-approval rendering", () => {
     renderCallback();
 
     const retry = await screen.findByRole("button", { name: /retry now/i });
-    expect(retry).toBeInTheDocument();
+    fireEvent.click(retry);
+
+    await waitFor(() => {
+      expect(screen.getByText(/add vault page/i)).toBeInTheDocument();
+    });
   });
 
   it("falls back to the generic 'Connection failed' UI for non-pending-approval errors", async () => {

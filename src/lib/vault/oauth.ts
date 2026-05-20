@@ -132,7 +132,7 @@ function safeApproveUrl(raw: unknown): string | undefined {
   return raw;
 }
 
-function parsePendingApproval(text: string): { approveUrl?: string } | null {
+function parsePendingApproval(text: string): { approveUrl: string } | null {
   let parsed: unknown;
   try {
     parsed = JSON.parse(text);
@@ -159,19 +159,20 @@ function parsePendingApproval(text: string): { approveUrl?: string } | null {
  * one-click "approve in hub" path:
  *
  *   - `approveUrl` — hub-served SPA route (`/admin/approve-client/<id>`)
- *     the operator can open to approve the client inline. Same-origin to
- *     the hub. Absent on pre-#240 hubs — in which case `completeOAuth`
- *     falls through to the generic token-exchange error rather than
- *     surfacing a friendly screen with nothing to click.
+ *     the operator can open to approve the client inline. Same-origin
+ *     to the hub. `parsePendingApproval` returns `null` (and
+ *     `completeOAuth` falls through to the generic token-exchange
+ *     error) when the hub omits it, so by the time this error is
+ *     thrown, `approveUrl` is guaranteed to be a valid http(s) string.
  *
  * Hub still emits a `cli_alternative` shell command in the same response
  * for terminal-comfortable operators, but Notes no longer surfaces it —
  * the wizard-era goal is "everything from a browser."
  */
 export class PendingApprovalError extends Error {
-  readonly approveUrl?: string;
+  readonly approveUrl: string;
 
-  constructor(approveUrl: string | undefined) {
+  constructor(approveUrl: string) {
     super("Your hub needs to approve this app before sign-in can complete.");
     this.name = "PendingApprovalError";
     this.approveUrl = approveUrl;
