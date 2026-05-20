@@ -2,7 +2,7 @@ import { OAuthCallback } from "@/app/routes/OAuthCallback";
 import { savePendingOAuth } from "@/lib/vault/storage";
 import { useVaultStore } from "@/lib/vault/store";
 import type { PendingOAuthState } from "@/lib/vault/types";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -74,29 +74,37 @@ describe("OAuthCallback pending-approval rendering", () => {
     // Pinned exactly so a future edit dropping noreferrer fails loud.
     expect(link).toHaveAttribute("rel", "noopener noreferrer");
     expect(screen.getByText(/your hub admin needs to approve this app/i)).toBeInTheDocument();
-    // CLI alternative is shown as the secondary path.
-    expect(screen.getByText(/parachute auth approve-client client-123/)).toBeInTheDocument();
+    // CLI alternative is intentionally NOT surfaced — the web approval path
+    // is the path now.
+    expect(screen.queryByText(/parachute auth approve-client/)).not.toBeInTheDocument();
     // Does NOT show the raw "Connection failed" error UI.
     expect(screen.queryByText(/connection failed/i)).not.toBeInTheDocument();
   });
 
-  it("renders the CLI fallback alone when a pre-#240 hub omits approve_url", async () => {
+  it("'Retry now' navigates to /add (single-use code: reload would re-redeem and 4xx)", async () => {
+    // Single-use authorization codes (RFC 6749 §4.1.2) mean a naive
+    // reload-with-same-params strategy reuses the already-redeemed code and
+    // lands the user on the generic "Connection failed" screen. Pin the
+    // navigate-to-/add behavior so a future change can't accidentally
+    // re-introduce the reload pattern.
     savePendingOAuth(pending);
+    const approveUrl = "http://localhost:1940/admin/approve-client/client-123";
     mockTokenResponse({
       body: JSON.stringify({
         error: "invalid_client",
         error_description: "client pending approval",
-        cli_alternative: "parachute auth approve-client client-123",
+        approve_url: approveUrl,
       }),
     });
 
     renderCallback();
 
+    const retry = await screen.findByRole("button", { name: /retry now/i });
+    fireEvent.click(retry);
+
     await waitFor(() => {
-      expect(screen.getByText(/waiting for hub approval/i)).toBeInTheDocument();
+      expect(screen.getByText(/add vault page/i)).toBeInTheDocument();
     });
-    expect(screen.queryByRole("link", { name: /open approval page/i })).not.toBeInTheDocument();
-    expect(screen.getByText(/parachute auth approve-client client-123/)).toBeInTheDocument();
   });
 
   it("falls back to the generic 'Connection failed' UI for non-pending-approval errors", async () => {
