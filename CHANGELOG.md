@@ -2,6 +2,33 @@
 
 ## Unreleased
 
+### OAuth pending-approval polish
+
+- **polish(oauth): drop CLI alternative from pending-approval render +
+  add retry button (0.3.15-rc.14).** The web-approval path is the path
+  now; the `parachute auth approve-client <id>` fallback alongside the
+  "Open approval page" button made operators think they still needed
+  terminal access, contradicting the hub#266 wizard goal of
+  "everything from a browser."
+
+  - `OAuthCallback.tsx`: drop the `<code>parachute auth …</code>`
+    block from the pending-approval screen; drop `cliAlternative` from
+    the `Status` discriminated union and the `setStatus` call in the
+    catch branch.
+  - `OAuthCallback.tsx`: add a "Retry now" button alongside "Open
+    approval page" so operators can re-attempt OAuth completion after
+    approving in the new tab without restarting the connect flow.
+    Implementation uses `window.location.reload()` — re-runs the
+    `OAuthCallback` effect with the same code/state params.
+  - `oauth.ts`: drop `cliAlternative` from `PendingApprovalError`
+    (field, constructor, doc-comment) and from `parsePendingApproval`.
+    Without an `approve_url`, we now fall through to the generic
+    token-exchange-failed error rather than rendering an empty
+    "Waiting for hub approval" screen with nothing to click.
+  - Hub still emits `cli_alternative` in its `invalid_client` JSON;
+    Notes simply ignores it. Pre-#240 hubs that only emit
+    `cli_alternative` (no `approve_url`) get the generic error UI.
+
 ### Phase 2 polish
 
 - **chore(render): fold reviewer polish nits (0.3.15-rc.13).**
