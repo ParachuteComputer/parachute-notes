@@ -1,4 +1,5 @@
 import { OAuthCallback } from "@/app/routes/OAuthCallback";
+import { useAuthHaltStore } from "@/lib/vault/auth-halt-store";
 import { savePendingOAuth } from "@/lib/vault/storage";
 import { useVaultStore } from "@/lib/vault/store";
 import type { PendingOAuthState } from "@/lib/vault/types";
@@ -228,6 +229,99 @@ describe("OAuthCallback vault URL resolution (notes#121)", () => {
       const vaults = Object.values(useVaultStore.getState().vaults);
       expect(vaults).toHaveLength(1);
       expect(vaults[0]?.url).toBe(pending.issuerUrl);
+    });
+  });
+});
+
+// notes#148 — the OAuth reconnect path must clear the halt for BOTH the
+// new vault id AND the originally-halted vault id when the two differ. The
+// hub's token catalog can resolve a vault to a different URL than what's
+// currently stored (e.g. standalone-vault add → reconnected through a hub
+// proxy), in which case addVault creates a new entry under a fresh id and
+// the halt on the old id would otherwise be orphaned in localStorage.
+describe("OAuthCallback auth-halt clearing on successful reconnect (notes#148)", () => {
+  beforeEach(() => {
+    sessionStorage.clear();
+    localStorage.clear();
+    useVaultStore.setState({ vaults: {}, activeVaultId: null });
+    useAuthHaltStore.setState({ byVault: {} });
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+    useVaultStore.setState({ vaults: {}, activeVaultId: null });
+    useAuthHaltStore.setState({ byVault: {} });
+    sessionStorage.clear();
+    localStorage.clear();
+  });
+
+  it("clears the halt for the new vault id when reconnect resolves to the same URL", async () => {
+    // Same-URL reconnect: new id == old id. The single clearHalt call
+    // covers both. Pin so a future refactor doesn't accidentally drop the
+    // baseline same-URL behavior.
+    savePendingOAuth(pending);
+    // No priorHaltedVaultId — this exercises the cold/same-URL path.
+    // `vaultIdFromUrl("http://localhost:1940")` slugifies `:` → `_`.
+    const newId = "localhost_1940";
+    useAuthHaltStore.getState().markHalted(newId, "session expired");
+    mockSuccessfulTokenResponse({
+      vault: "default",
+      services: { vault: { url: "http://localhost:1940" } },
+    });
+
+    renderCallback();
+
+    await waitFor(() => {
+      expect(useAuthHaltStore.getState().byVault[newId]).toBeUndefined();
+    });
+  });
+
+  it("clears the originally-halted id when the new vault url resolves to a different id", async () => {
+    // Real-world reconnect scenario Aaron hit: vault was added standalone
+    // at `localhost:1940`, the user reconnects via a hub-fronted issuer,
+    // and the hub returns `services.vault.url = "http://hub.example/vault/default"`.
+    // addVault registers a NEW vault entry under a different id and the
+    // OLD halt would otherwise survive forever in localStorage. The
+    // new-vault id has no halt to clear — we have to clear the old id
+    // explicitly via the priorHaltedVaultId stash.
+    const oldId = "localhost_1940";
+    const reconnectPending: PendingOAuthState = { ...pending, priorHaltedVaultId: oldId };
+    savePendingOAuth(reconnectPending);
+    useAuthHaltStore.getState().markHalted(oldId, "session expired");
+    mockSuccessfulTokenResponse({
+      vault: "default",
+      services: { vault: { url: "http://hub.example/vault/default" } },
+    });
+
+    renderCallback();
+
+    await waitFor(() => {
+      expect(useAuthHaltStore.getState().byVault[oldId]).toBeUndefined();
+    });
+    // And the new vault id is the active one (vaultIdFromUrl slugifies `/`
+    // and other non-word chars to `_`).
+    expect(useVaultStore.getState().activeVaultId).toBe("hub.example_vault_default");
+  });
+
+  it("clears localStorage too — survives a page reload", async () => {
+    // Structural test for the contract that a reconnect clears the halt
+    // in *persistent* storage, not just the in-memory zustand state.
+    // Without this, a reload after reconnect would re-seed the store
+    // from a stale localStorage entry and the banner would reappear.
+    const oldId = "localhost_1940";
+    const reconnectPending: PendingOAuthState = { ...pending, priorHaltedVaultId: oldId };
+    savePendingOAuth(reconnectPending);
+    useAuthHaltStore.getState().markHalted(oldId, "session expired");
+    expect(localStorage.getItem(`lens:auth-halt:${oldId}`)).not.toBeNull();
+    mockSuccessfulTokenResponse({
+      vault: "default",
+      services: { vault: { url: "http://hub.example/vault/default" } },
+    });
+
+    renderCallback();
+
+    await waitFor(() => {
+      expect(localStorage.getItem(`lens:auth-halt:${oldId}`)).toBeNull();
     });
   });
 });

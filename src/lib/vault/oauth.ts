@@ -41,6 +41,17 @@ export interface BeginOAuthOptions {
    * consent screen renders as today.
    */
   params?: Record<string, string>;
+  /**
+   * Vault id whose halt entry should be cleared on a successful OAuth
+   * completion (notes#148). Set by the reconnect path so the originally
+   * halted vault gets unblocked even when the hub's token catalog resolves
+   * the vault to a different URL than what's currently stored — the new
+   * vault entry would otherwise have a fresh (non-halted) id, leaving the
+   * old halt orphaned in localStorage and the banner stuck on the next
+   * activeVaultId switch. Round-trips via sessionStorage on the
+   * PendingOAuthState; OAuthCallback consumes it.
+   */
+  priorHaltedVaultId?: string;
 }
 
 /**
@@ -90,6 +101,7 @@ export async function beginOAuth(
     redirectUri,
     scope,
     startedAt: new Date().toISOString(),
+    ...(options.priorHaltedVaultId ? { priorHaltedVaultId: options.priorHaltedVaultId } : {}),
   };
   savePendingOAuth(pending);
 
