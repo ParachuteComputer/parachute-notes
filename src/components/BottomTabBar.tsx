@@ -3,10 +3,12 @@ import { useVaultStore } from "@/lib/vault";
 import type { ReactNode } from "react";
 import { Link, useLocation } from "react-router";
 
-// Mobile-only fixed bottom navigation. Primary wayfinding on phones;
-// replaces the header-hamburger-as-only-nav pattern that shipped before the
-// IA shift. Hidden on >= md breakpoints where the desktop sidebar + header
-// handle navigation.
+// Mobile + tablet fixed bottom navigation. Primary wayfinding on phones and
+// tablets; replaces the header-hamburger-as-only-nav pattern that shipped
+// before the IA shift. Hidden on >= lg breakpoints where the desktop inline
+// cluster in Header handles navigation. The breakpoint MUST match Header's
+// desktop-cluster `lg:flex` gate — at 768-1023px, neither would be shown if
+// these two diverged, and primary navigation would disappear (notes#147).
 //
 // Each tab is a 56px-tall touch target with an icon and a label. Icons are
 // inline SVGs (no new deps) sized 20px. Active tab is determined by
@@ -30,7 +32,7 @@ export function BottomTabBar() {
   return (
     <nav
       aria-label="Primary"
-      className="fixed inset-x-0 bottom-0 z-20 border-t border-border bg-bg/95 backdrop-blur md:hidden"
+      className="fixed inset-x-0 bottom-0 z-20 border-t border-border bg-bg/95 backdrop-blur lg:hidden"
       style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
     >
       <ul className="mx-auto flex max-w-5xl items-stretch justify-around">

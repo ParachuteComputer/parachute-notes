@@ -316,6 +316,11 @@ export function VaultPopover({ variant = "header" }: VaultPopoverProps) {
         aria-expanded={open}
         aria-haspopup="dialog"
         onClick={() => setOpen((v) => !v)}
+        // `title` mirrors the visible label so sighted users can hover to
+        // see the full vault name when the rem-capped trigger truncates it
+        // (notes#147 reviewer). Inline variant lays out at full width so
+        // the title is harmless redundancy there.
+        title={variant === "header" ? triggerLabel : undefined}
         className={
           variant === "header"
             ? // `max-w-[12rem]` caps the trigger at a rem-based width so a

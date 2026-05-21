@@ -59,10 +59,14 @@ describe("BottomTabBar", () => {
     expect(screen.queryByRole("navigation", { name: /primary/i })).toBeNull();
   });
 
-  it("is hidden on md+ viewports via md:hidden class", () => {
+  it("is hidden on lg+ viewports via lg:hidden class (matches Header desktop-cluster lg:flex gate — notes#147)", () => {
     renderAt("/");
     const nav = screen.getByRole("navigation", { name: /primary/i });
-    expect(nav.className).toMatch(/\bmd:hidden\b/);
+    expect(nav.className).toMatch(/\blg:hidden\b/);
+    // Guard against regressing back to `md:hidden` — at 768-1023px that
+    // would hide BottomTabBar while Header's desktop cluster (lg:flex) is
+    // still hidden too, leaving tablet users with no primary navigation.
+    expect(nav.className).not.toMatch(/\bmd:hidden\b/);
   });
 
   it("marks the Home tab active on /", () => {
