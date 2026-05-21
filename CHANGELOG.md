@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.3.16-rc.2 (2026-05-21)
+
+- **refactor(notes): move `InsecureContextBanner` to `src/components/`.**
+  The banner was originally defined and exported from
+  `src/app/routes/AddVault.tsx` (where it was first used) and imported
+  from there by `VaultPopover.tsx` and `VaultStatusBanner.tsx`. That's
+  a components-importing-from-routes dependency inversion — routes
+  should be leaves. Relocated to
+  `src/components/InsecureContextBanner.tsx` with no behavior change;
+  three import sites updated. Closes #143.
+
 ## 0.3.16-rc.1 (2026-05-20)
 
 - **fix(notes): clear error message when OAuth attempted from insecure
