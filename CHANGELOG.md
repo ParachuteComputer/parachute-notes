@@ -1,5 +1,39 @@
 # Changelog
 
+## 0.3.16-rc.1 (2026-05-20)
+
+- **fix(notes): clear error message when OAuth attempted from insecure
+  context.** Aaron hit `Cannot read properties of undefined (reading
+  'digest')` on fresh-install testing when connecting Notes (served
+  from a non-loopback HTTP origin) to a vault. Root cause: Web Crypto
+  (`crypto.subtle`) is only exposed in W3C secure contexts — HTTPS,
+  `http://localhost`, or `http://127.0.0.1` — and Aaron's hub URL was
+  `http://192.168.1.10:1939`. There is no polyfill: the gating is
+  deliberate, and PKCE genuinely can't run there.
+
+  - `src/lib/vault/pkce.ts`: introduce `InsecureContextError` and
+    assert `crypto.subtle?.digest` is present at the top of
+    `deriveCodeChallenge` (and `crypto.getRandomValues` in
+    `generateCodeVerifier` / `generateState`). Throws an
+    operator-facing message that names the cause and lists both
+    remediations (HTTPS via Tailscale Serve / Cloudflare Tunnel /
+    reverse proxy, or switch to the `http://localhost` form).
+  - `src/app/routes/AddVault.tsx`: catch `InsecureContextError`
+    distinctly in the connect handler and render a new
+    `InsecureContextBanner` — amber palette + structured list of
+    remediations, deliberately different from the red "Connection
+    failed" strip so the operator can tell at a glance this is a
+    browser-policy failure, not a "hub is down" failure. Banner
+    shows the exact `window.location.origin` so there's no doubt
+    which URL the browser flagged.
+  - `src/components/VaultPopover.tsx`,
+    `src/components/VaultStatusBanner.tsx`: same catch + banner in
+    the other two OAuth-initiating call sites so the messaging is
+    consistent wherever PKCE can fail.
+
+  Does **not** make PKCE work in insecure contexts (it can't); makes
+  the failure mode obvious and points the operator at the two fixes.
+
 ## 0.3.15 (2026-05-20)
 
 Stable release. Cumulative changes since `0.3.14`:

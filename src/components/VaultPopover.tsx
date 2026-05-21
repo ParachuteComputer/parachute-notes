@@ -1,3 +1,4 @@
+import { InsecureContextBanner } from "@/app/routes/AddVault";
 import {
   type HubVaultEntry,
   type VaultRecord,
@@ -7,6 +8,7 @@ import {
   normalizeVaultUrl,
   useVaultStore,
 } from "@/lib/vault";
+import { InsecureContextError } from "@/lib/vault/pkce";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 
@@ -113,6 +115,7 @@ export function VaultPopover({ variant = "header" }: VaultPopoverProps) {
   const [hubVaults, setHubVaults] = useState<HubVaultEntry[] | null>(null);
   const [connecting, setConnecting] = useState<string | null>(null);
   const [connectError, setConnectError] = useState<string | null>(null);
+  const [insecureContext, setInsecureContext] = useState(false);
   const rootRef = useRef<HTMLDivElement | null>(null);
 
   const hubOrigin = useMemo(
@@ -176,6 +179,7 @@ export function VaultPopover({ variant = "header" }: VaultPopoverProps) {
   const onConnect = useCallback(async (row: AvailableRow) => {
     setConnecting(row.name);
     setConnectError(null);
+    setInsecureContext(false);
     try {
       // Path A (design doc §2): pass `vault=<name>` as a hint. Pre-#240 hubs
       // ignore it and the consent screen renders the picker as today; future
@@ -186,7 +190,15 @@ export function VaultPopover({ variant = "header" }: VaultPopoverProps) {
       window.location.assign(authorizeUrl);
     } catch (err) {
       setConnecting(null);
-      setConnectError((err as Error).message);
+      // Insecure-context failure has a distinct remediation path (use
+      // localhost, or terminate HTTPS upstream) — surface it with the
+      // dedicated banner instead of jamming the long actionable message
+      // into the popover's thin error line.
+      if (err instanceof InsecureContextError) {
+        setInsecureContext(true);
+      } else {
+        setConnectError((err as Error).message);
+      }
     }
   }, []);
 
@@ -268,6 +280,12 @@ export function VaultPopover({ variant = "header" }: VaultPopoverProps) {
               </li>
             ))}
           </ul>
+        </div>
+      ) : null}
+
+      {insecureContext ? (
+        <div className="border-b border-border px-3 py-2">
+          <InsecureContextBanner />
         </div>
       ) : null}
 

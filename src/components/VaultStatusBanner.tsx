@@ -1,5 +1,7 @@
+import { InsecureContextBanner } from "@/app/routes/AddVault";
 import { useAuthHaltStore } from "@/lib/vault/auth-halt-store";
 import { beginOAuth } from "@/lib/vault/oauth";
+import { InsecureContextError } from "@/lib/vault/pkce";
 import { useActiveVaultClient } from "@/lib/vault/queries";
 import { useVaultReachabilityStore } from "@/lib/vault/reachability-store";
 import { useVaultStore } from "@/lib/vault/store";
@@ -50,9 +52,11 @@ function AuthHaltBanner({
 }: { reason: string; vaultIssuer: string; vaultScope: string }) {
   const [reconnecting, setReconnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [insecureContext, setInsecureContext] = useState(false);
 
   async function onReconnect() {
     setError(null);
+    setInsecureContext(false);
     setReconnecting(true);
     try {
       // Prefer the issuer we OAuthed against originally — under hub-as-issuer
@@ -61,7 +65,14 @@ function AuthHaltBanner({
       const { authorizeUrl } = await beginOAuth(vaultIssuer, vaultScope);
       window.location.assign(authorizeUrl);
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      // Insecure-context surfaces with a structured remediation banner
+      // instead of being squashed into the red one-liner — same reasoning
+      // as AddVault / VaultPopover.
+      if (err instanceof InsecureContextError) {
+        setInsecureContext(true);
+      } else {
+        setError(err instanceof Error ? err.message : String(err));
+      }
     } finally {
       // Reset even on success: if the browser blocks the navigation (popup
       // blocker on a programmatic assign, content-security policy), the page
@@ -91,6 +102,11 @@ function AuthHaltBanner({
           {reconnecting ? "Starting OAuth…" : "Reconnect to vault"}
         </button>
       </div>
+      {insecureContext ? (
+        <div className="mx-auto mt-2 max-w-5xl">
+          <InsecureContextBanner />
+        </div>
+      ) : null}
     </div>
   );
 }
