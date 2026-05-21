@@ -1,9 +1,11 @@
 import { VaultStatusBanner, isLoopbackOrLocal } from "@/components/VaultStatusBanner";
 import { useAuthHaltStore } from "@/lib/vault/auth-halt-store";
+import * as oauthModule from "@/lib/vault/oauth";
+import { InsecureContextError } from "@/lib/vault/pkce";
 import { useVaultReachabilityStore } from "@/lib/vault/reachability-store";
 import { useVaultStore } from "@/lib/vault/store";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // The banner uses `useActiveVaultClient` for the Retry button. Stub it out
@@ -140,6 +142,43 @@ describe("VaultStatusBanner", () => {
     renderBanner();
     fireEvent.click(screen.getByRole("button", { name: /dismiss banner/i }));
     expect(useVaultReachabilityStore.getState().byVault.v).toBeUndefined();
+  });
+
+  // notes#143 follow-up: pin the auth-halt reconnect path's wiring to
+  // `InsecureContextBanner` at the component level so a refactor of the
+  // catch branch is caught here rather than in production.
+  it("renders the InsecureContextBanner when Reconnect's beginOAuth throws InsecureContextError", async () => {
+    useAuthHaltStore.getState().markHalted("v", "session expired");
+    vi.spyOn(oauthModule, "beginOAuth").mockRejectedValue(
+      new InsecureContextError("insecure context"),
+    );
+    renderBanner();
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /reconnect to vault/i }));
+    });
+    const banner = await screen.findByTestId("insecure-context-banner");
+    expect(banner).toHaveTextContent(/Insecure context/i);
+    expect(banner).toHaveTextContent(/HTTPS or accessed at/i);
+  });
+
+  it("does not render the InsecureContextBanner on a generic Reconnect error", async () => {
+    useAuthHaltStore.getState().markHalted("v", "session expired");
+    vi.spyOn(oauthModule, "beginOAuth").mockRejectedValue(new Error("hub returned 502"));
+    renderBanner();
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /reconnect to vault/i }));
+    });
+    // Generic error renders inside the auth-halt block; banner stays hidden.
+    await waitFor(() => expect(screen.getByText(/hub returned 502/i)).toBeInTheDocument());
+    expect(screen.queryByTestId("insecure-context-banner")).not.toBeInTheDocument();
+  });
+
+  it("does not render the InsecureContextBanner when there is no failure", () => {
+    useAuthHaltStore.getState().markHalted("v", "session expired");
+    renderBanner();
+    // Banner only appears after a failed reconnect attempt — initial render
+    // of the auth-halt block shouldn't include it.
+    expect(screen.queryByTestId("insecure-context-banner")).not.toBeInTheDocument();
   });
 });
 
