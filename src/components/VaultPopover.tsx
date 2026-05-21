@@ -1,4 +1,4 @@
-import { InsecureContextBanner } from "@/app/routes/AddVault";
+import { InsecureContextBanner } from "@/components/InsecureContextBanner";
 import {
   type HubVaultEntry,
   type VaultRecord,

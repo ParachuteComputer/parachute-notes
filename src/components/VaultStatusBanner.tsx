@@ -1,4 +1,4 @@
-import { InsecureContextBanner } from "@/app/routes/AddVault";
+import { InsecureContextBanner } from "@/components/InsecureContextBanner";
 import { useAuthHaltStore } from "@/lib/vault/auth-halt-store";
 import { beginOAuth } from "@/lib/vault/oauth";
 import { InsecureContextError } from "@/lib/vault/pkce";
