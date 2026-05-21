@@ -47,6 +47,7 @@ function renderBanner() {
 
 describe("VaultStatusBanner", () => {
   beforeEach(() => {
+    vi.restoreAllMocks();
     seedVault();
     localStorage.clear();
     useAuthHaltStore.setState({ byVault: {} });
@@ -58,6 +59,7 @@ describe("VaultStatusBanner", () => {
     localStorage.clear();
     useAuthHaltStore.setState({ byVault: {} });
     useVaultReachabilityStore.setState({ byVault: {} });
+    vi.restoreAllMocks();
   });
 
   it("renders nothing when both stores are clean", () => {
