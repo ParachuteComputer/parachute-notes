@@ -1225,6 +1225,218 @@ describe("Capture — inactivity autosave (5s)", () => {
     }
     db.close();
   });
+
+  it("manual Capture during draftSave's in-flight create routes to update-note (notes#135 race)", async () => {
+    // notes#135 race: in rc.10 the draftSave path set
+    // `{ localId, hasEnqueuedCreate: false }` BEFORE awaiting the
+    // create-note enqueue, then flipped to `true` AFTER. During that
+    // await window, a manual Capture click read `hasEnqueuedCreate ===
+    // false` and fell into the fresh-create else branch — enqueuing a
+    // SECOND create-note row with the same localId. Fix: flip the
+    // committed-flag SYNCHRONOUSLY before the await so a racing manual
+    // save sees the post-create state and routes to update-note.
+    //
+    // We can't directly stall the real `enqueue` to widen the window
+    // (the test mock wraps the real one). Instead we drive the timer
+    // to fire `draftSave` and IMMEDIATELY (synchronously, same React
+    // batch) click Capture — both code paths run their pre-await
+    // setup in the same tick. With the bug, the queue ends up with
+    // two create-note rows (same localId). With the fix, the queue
+    // has one create-note + one update-note.
+    renderAt("/capture");
+    await waitForReady();
+    const textarea = screen.getByLabelText(/capture content/i) as HTMLTextAreaElement;
+    await act(async () => {
+      fireEvent.change(textarea, { target: { value: "racing the autosave" } });
+    });
+    // Single act() that fires the autosave timer AND clicks Capture —
+    // both code paths read draftRef before either await resolves.
+    await act(async () => {
+      vi.advanceTimersByTime(5_500);
+      fireEvent.click(screen.getByRole("button", { name: /^capture$/i }));
+    });
+
+    await waitFor(() => {
+      expect(useToastStore.getState().toasts.some((t) => t.message === "Captured.")).toBe(true);
+    });
+
+    const db = await openLensDB();
+    const rows = await listPending(db, "dev");
+    db.close();
+    const kinds = rows.map((r) => r.mutation.kind);
+    // Exactly one create-note (from the autosave), exactly one update-note
+    // (from the racing manual Capture) — NOT two create-notes.
+    expect(kinds.filter((k) => k === "create-note").length).toBe(1);
+    expect(kinds.filter((k) => k === "update-note").length).toBe(1);
+    // The create + update share the same localId / targetId so the drain
+    // resolves them as a single note. Pre-fix: two create-notes with
+    // identical localId would either dedupe vault-side (best case) or
+    // duplicate the note (worst case).
+    const create = rows.find((r) => r.mutation.kind === "create-note")!;
+    const update = rows.find((r) => r.mutation.kind === "update-note")!;
+    if (create.mutation.kind !== "create-note" || update.mutation.kind !== "update-note") {
+      throw new Error("wrong mutation shape");
+    }
+    expect(update.mutation.targetId).toBe(create.mutation.localId);
+  });
+
+  it("unmount during draftSave's in-flight create routes to update-note (notes#135 race)", async () => {
+    // Companion race for the unmount path: in rc.10 the unmount-flush
+    // checked `draft?.hasEnqueuedCreate` and fell back to create-note
+    // when false, even though draftSave had already committed to
+    // enqueueing a create for that localId. After the fix, the
+    // committed-flag flips synchronously so the unmount-flush sees
+    // the post-create state and enqueues update-note.
+    function Toggler() {
+      const [mounted, setMounted] = useState(true);
+      return (
+        <>
+          <button type="button" onClick={() => setMounted(false)}>
+            unmount
+          </button>
+          {mounted ? <Capture /> : <div>unmounted</div>}
+        </>
+      );
+    }
+    render(
+      <MemoryRouter>
+        <Toggler />
+      </MemoryRouter>,
+      { wrapper: Wrapper },
+    );
+    await waitFor(() => {
+      expect(screen.getByLabelText(/capture content/i)).toBeInTheDocument();
+    });
+    const textarea = screen.getByLabelText(/capture content/i) as HTMLTextAreaElement;
+    await act(async () => {
+      fireEvent.change(textarea, { target: { value: "racing the unmount-flush" } });
+    });
+    // Fire autosave + unmount in the same act() so both code paths
+    // read draftRef before draftSave's create-note await resolves.
+    await act(async () => {
+      vi.advanceTimersByTime(5_500);
+      fireEvent.click(screen.getByRole("button", { name: "unmount" }));
+    });
+    await waitFor(() => {
+      expect(screen.getByText("unmounted")).toBeInTheDocument();
+    });
+
+    await waitFor(async () => {
+      const db = await openLensDB();
+      const rows = await listPending(db, "dev");
+      db.close();
+      expect(rows.length).toBe(2);
+    });
+    const db = await openLensDB();
+    const rows = await listPending(db, "dev");
+    db.close();
+    const kinds = rows.map((r) => r.mutation.kind);
+    // One create (autosave) + one update (unmount-flush) — never two creates.
+    expect(kinds.filter((k) => k === "create-note").length).toBe(1);
+    expect(kinds.filter((k) => k === "update-note").length).toBe(1);
+  });
+
+  it("failed create-note draftSave resets draft so the next autosave creates fresh (notes#135)", async () => {
+    // Race-fix companion: with the create-committed flag set
+    // synchronously, a create-note enqueue that THROWS must roll the
+    // ref back to null. Otherwise the next autosave reads `draft !==
+    // null` + `createCommitted: true` and enqueues update-note for a
+    // localId that was never actually created — orphan PATCH at the
+    // vault. The catch block now resets draftRef to null specifically
+    // on fresh-create failure (update-note failures leave the ref
+    // alone, since the create already shipped).
+    renderAt("/capture");
+    await waitForReady();
+    const textarea = screen.getByLabelText(/capture content/i) as HTMLTextAreaElement;
+    await act(async () => {
+      fireEvent.change(textarea, { target: { value: "first attempt" } });
+    });
+
+    // First autosave: simulate a failure.
+    enqueueState.failNext = true;
+    await act(async () => {
+      vi.advanceTimersByTime(5_500);
+    });
+    // Wait long enough for the failed enqueue's promise to settle.
+    await act(async () => {
+      await Promise.resolve();
+    });
+    // Queue still empty — the first create-note attempt threw.
+    {
+      const db = await openLensDB();
+      const rows = await listPending(db, "dev");
+      db.close();
+      expect(rows.length).toBe(0);
+    }
+
+    // Type more — fresh keystroke restarts the 5s timer.
+    await act(async () => {
+      fireEvent.change(textarea, { target: { value: "first attempt plus more" } });
+    });
+    await act(async () => {
+      vi.advanceTimersByTime(5_500);
+    });
+    await waitFor(async () => {
+      const db = await openLensDB();
+      const rows = await listPending(db, "dev");
+      db.close();
+      expect(rows.length).toBe(1);
+    });
+    const db = await openLensDB();
+    const rows = await listPending(db, "dev");
+    db.close();
+    // The second autosave must enqueue create-note (NOT update-note for
+    // the rolled-back localId).
+    expect(rows[0]?.mutation.kind).toBe("create-note");
+    if (rows[0]?.mutation.kind === "create-note") {
+      expect(rows[0].mutation.payload.content).toBe("first attempt plus more");
+    }
+  });
+
+  it("draft-saved indicator re-renders so relativeTime tracks wall-clock (notes#135)", async () => {
+    // notes#135 indicator staleness: in rc.10 the "Draft saved · just
+    // now" label was computed at render time from `draftSavedAt`, but
+    // nothing else in the component changed between autosaves — so
+    // the label could stay at "just now" for a long idle even though
+    // wall-clock had moved on. Fix: 15s setInterval bumps a tick
+    // state while a draft is in flight, forcing a re-render.
+    //
+    // Test by triggering a draft, then advancing wall-clock past the
+    // "just now" threshold (1 minute). The label must transition to
+    // "1m ago" WITHOUT any user interaction. Pre-fix the label
+    // freezes at "just now"; post-fix the interval bumps a tick that
+    // re-renders the indicator.
+    const t0 = new Date(2026, 4, 21, 12, 0, 0).getTime();
+    vi.setSystemTime(t0);
+    renderAt("/capture");
+    await waitForReady();
+    const textarea = screen.getByLabelText(/capture content/i) as HTMLTextAreaElement;
+    await act(async () => {
+      fireEvent.change(textarea, { target: { value: "indicator test" } });
+    });
+    // Trigger the autosave.
+    await act(async () => {
+      vi.advanceTimersByTime(5_500);
+    });
+    await waitFor(async () => {
+      const db = await openLensDB();
+      const rows = await listPending(db, "dev");
+      db.close();
+      expect(rows.length).toBe(1);
+    });
+    // Right after the draft lands the label is "just now".
+    expect(screen.getByText(/Draft saved · just now/)).toBeInTheDocument();
+
+    // Advance wall-clock 70s WITHOUT any user interaction. The 15s
+    // tick interval should fire ~4 times in this window; the most
+    // recent tick re-renders the indicator AFTER `relativeTime()`
+    // crosses the 1-minute boundary, so the label moves from "just
+    // now" to "1m ago".
+    await act(async () => {
+      vi.advanceTimersByTime(70_000);
+    });
+    expect(screen.getByText(/Draft saved · 1m ago/)).toBeInTheDocument();
+  });
 });
 
 describe("extractHashtags", () => {
