@@ -1,5 +1,38 @@
 # Changelog
 
+## [0.3.16-rc.4] - 2026-05-21
+
+- **fix(notes): capture race + draft-saved indicator staleness (#135).**
+  Two small follow-ups from the #134 review on the rc.10 draft-save
+  redesign:
+
+  - *Race window in `draftSave`*: the ref was set to `{ localId,
+    hasEnqueuedCreate: false }` BEFORE awaiting the create-note
+    enqueue and flipped to `true` after. During that sub-millisecond
+    window, a manual Capture click (or unmount-flush) read
+    `hasEnqueuedCreate === false`, fell into the fresh-create branch,
+    and enqueued a SECOND `create-note` row with the same localId.
+    Fix: flip the committed flag SYNCHRONOUSLY before the await —
+    renamed to `createCommitted` for clarity. IndexedDB's
+    autoincrement `seq` orders the create's `db.add()` before any
+    racing update by call order, so FIFO drain processes
+    create-then-update correctly regardless of which await resolves
+    first. If the create enqueue itself throws, the catch block now
+    resets the ref back to null so the next attempt creates fresh
+    (update-note failures leave the ref alone — the create already
+    shipped). Three new regression tests cover (a) manual Capture
+    racing the autosave, (b) unmount racing the autosave, (c)
+    create-failure roll-back so the next autosave creates fresh.
+  - *Draft-saved indicator staleness*: the "Draft saved · just now"
+    label was computed at render time from `draftSavedAt`, but nothing
+    else in the component changed while the user idled — so the label
+    could stay at "just now" for the full 5s autosave window (and
+    longer if the user idled after a finalized draft) even though
+    wall-clock had moved on. Fix: a 15s `setInterval` bumps a tick
+    state while `draftSavedAt !== null` so `relativeTime()` keeps
+    tracking. One new test confirms the label transitions from "just
+    now" to "1m ago" after 70s without user interaction.
+
 ## [0.3.16-rc.3] - 2026-05-21
 
 - **test(notes): component-level insecure-context tests for VaultPopover

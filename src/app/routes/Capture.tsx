@@ -116,15 +116,29 @@ export function Capture({
   // shipped) and clears the draft state on reset.
   //
   // draftRef.current === null means no draft is in flight. Once a draft
-  // exists, `hasEnqueuedCreate` toggles to true after the create-note
-  // hits the queue, so subsequent saves enqueue update-note instead.
+  // exists, `createCommitted` is set SYNCHRONOUSLY before draftSave's
+  // create-note enqueue await (notes#135 race fix) — so a parallel
+  // save() or unmount-flush in the same tick sees the post-create state
+  // and routes to update-note. IndexedDB's autoincrement `seq` orders
+  // the create before any racing update by call order, so FIFO drain
+  // sees create-then-update regardless of which await resolves first.
+  // If the create enqueue itself throws, draftSave's catch block
+  // resets the ref back to null so the next attempt creates fresh.
   const draftRef = useRef<{
     localId: string;
-    hasEnqueuedCreate: boolean;
+    createCommitted: boolean;
   } | null>(null);
   // Wall-clock ms of the most recent successful background draft save.
   // Drives the "Draft saved · just now" indicator next to the textarea.
   const [draftSavedAt, setDraftSavedAt] = useState<number | null>(null);
+  // Re-render tick for the "Draft saved · just now" indicator (notes#135).
+  // `relativeTime()` is computed at render time from `draftSavedAt`, but
+  // nothing else in this component changes while the user idles after a
+  // draft has landed — so the label could stay at "just now" for the full
+  // 5s autosave window even though wall-clock has advanced. Bumping this
+  // every 15s while a draft is in flight forces a re-render so the label
+  // tracks reality without polling when there's nothing to show.
+  const [indicatorTick, setIndicatorTick] = useState(0);
 
   const recorderRef = useRef<RecorderController | null>(null);
   const previewUrlRef = useRef<string | null>(null);
@@ -364,7 +378,7 @@ export function Capture({
           },
           { vaultId: activeVault.id },
         );
-      } else if (draft?.hasEnqueuedCreate) {
+      } else if (draft?.createCommitted) {
         // Finalize an in-flight background draft (rc.10). The create-note
         // already shipped via the first autosave; enqueue an update-note
         // with the latest content + tags + path. `path` and `tags` go
@@ -476,14 +490,23 @@ export function Capture({
     const summaryValue = summary.trim();
     const metadata = summaryValue ? { summary: summaryValue } : undefined;
 
+    // Snapshot whether we're about-to-create vs already-created BEFORE the
+    // await so the catch block can roll back accurately. notes#135 race
+    // fix: the ref flips to `createCommitted: true` SYNCHRONOUSLY here
+    // (before any await) so a parallel `save()` or unmount-flush in the
+    // same tick sees the post-create state and routes to update-note. The
+    // create-note's `db.add()` will still receive a lower autoincrement
+    // `seq` than any racing update-note (IndexedDB serializes add() by
+    // call order), so FIFO drain processes create-then-update correctly
+    // regardless of which await resolves first.
+    const draftBefore = draftRef.current;
+    const isFreshCreate = !draftBefore;
+    const localId = draftBefore?.localId ?? newLocalId();
+    if (isFreshCreate) {
+      draftRef.current = { localId, createCommitted: true };
+    }
     try {
-      const draft = draftRef.current;
-      if (!draft) {
-        const localId = newLocalId();
-        // Set the ref BEFORE the await so a parallel autosave fire on the
-        // next tick (extremely unlikely, but the timer is debounced) sees
-        // the existing draft and routes to update-note.
-        draftRef.current = { localId, hasEnqueuedCreate: false };
+      if (isFreshCreate) {
         await enqueue(
           db,
           {
@@ -498,13 +521,12 @@ export function Capture({
           },
           { vaultId: activeVault.id },
         );
-        draftRef.current = { localId, hasEnqueuedCreate: true };
       } else {
         await enqueue(
           db,
           {
             kind: "update-note",
-            targetId: draft.localId,
+            targetId: localId,
             payload: {
               content,
               path: pathValue,
@@ -519,7 +541,15 @@ export function Capture({
       setDraftSavedAt(Date.now());
     } catch {
       // Draft save is best-effort — silent failure. The next tick will
-      // retry; the unmount-flush is the last-ditch safety net.
+      // retry; the unmount-flush is the last-ditch safety net. If the
+      // *create* attempt failed, roll the ref back to null so the next
+      // draftSave attempt creates fresh instead of update-noting a
+      // never-created targetId. Update-note failures don't touch the ref
+      // — the create already shipped, the next attempt should retry as
+      // an update.
+      if (isFreshCreate) {
+        draftRef.current = null;
+      }
     }
   }, [
     db,
@@ -599,7 +629,7 @@ export function Capture({
       // enqueued by the first autosave) already shipped its content; this
       // PATCH just brings the post-autosave keystrokes along.
       const draft = draftRef.current;
-      const enqueuePromise = draft?.hasEnqueuedCreate
+      const enqueuePromise = draft?.createCommitted
         ? enqueue(
             db,
             {
@@ -633,6 +663,24 @@ export function Capture({
       });
     };
   }, []);
+
+  // Indicator-tick refresh (notes#135). Re-render the "Draft saved" pill
+  // every 15s while `draftSavedAt` is set so `relativeTime()` keeps
+  // tracking wall-clock. Otherwise the label would freeze at "just now"
+  // for the full 5s autosave window (and longer, if the user idles after
+  // a finalized draft) because nothing else in the component changes.
+  // Guarded by `draftSavedAt !== null` so we don't spin a timer in the
+  // common idle-empty case. INDICATOR_TICK_MS is small enough that the
+  // label stays in step with `relativeTime()`'s minute-grain output —
+  // by the time a single minute rolls over (the first label change from
+  // "just now" to "1m ago") we've ticked four times.
+  useEffect(() => {
+    if (draftSavedAt === null) return;
+    const id = setInterval(() => {
+      setIndicatorTick((n) => n + 1);
+    }, 15_000);
+    return () => clearInterval(id);
+  }, [draftSavedAt]);
 
   // Inactivity autosave (5s) — fires `draftSave()` after the user stops
   // editing for 5 seconds. Saves a partial as a background draft (notes
@@ -690,7 +738,15 @@ export function Capture({
         />
 
         {draftSavedAt !== null ? (
-          <p className="-mt-2 text-right text-[11px] text-fg-dim" aria-live="polite">
+          <p
+            className="-mt-2 text-right text-[11px] text-fg-dim"
+            aria-live="polite"
+            // Tag the indicator element with the tick so it's a node-level
+            // read of the bumped state — keeps Biome quiet about an unused
+            // value AND re-renders the label as wall-clock advances. The
+            // attribute itself is inert; the React work is the point.
+            data-indicator-tick={indicatorTick}
+          >
             Draft saved · {relativeTime(new Date(draftSavedAt).toISOString())}
           </p>
         ) : null}
