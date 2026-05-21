@@ -309,7 +309,7 @@ export function VaultPopover({ variant = "header" }: VaultPopoverProps) {
   );
 
   return (
-    <div ref={rootRef} className={variant === "header" ? "relative" : ""}>
+    <div ref={rootRef} className={variant === "header" ? "relative max-w-full" : ""}>
       <button
         type="button"
         aria-label={`Active vault: ${triggerLabel}`}
@@ -318,13 +318,16 @@ export function VaultPopover({ variant = "header" }: VaultPopoverProps) {
         onClick={() => setOpen((v) => !v)}
         className={
           variant === "header"
-            ? "flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1.5 text-sm text-fg hover:border-accent/50"
+            ? // `max-w-[12rem]` caps the trigger at a rem-based width so a
+              // long vault name truncates instead of pushing header siblings
+              // out (notes#136). rem so the cap scales with text-size.
+              "flex min-w-0 max-w-[12rem] items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1.5 text-sm text-fg hover:border-accent/50"
             : "flex w-full items-center justify-between rounded-md border border-border bg-card px-3 py-2 text-sm text-fg"
         }
       >
         <span aria-hidden className="inline-block h-2 w-2 shrink-0 rounded-full bg-accent" />
-        <span className="truncate">{triggerLabel}</span>
-        <span aria-hidden className="ml-1 text-xs text-fg-dim">
+        <span className="min-w-0 truncate">{triggerLabel}</span>
+        <span aria-hidden className="ml-1 shrink-0 text-xs text-fg-dim">
           ▾
         </span>
       </button>
