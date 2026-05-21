@@ -1,5 +1,49 @@
 # Changelog
 
+## [0.3.16-rc.6] - 2026-05-21
+
+- **fix(notes): SW update reload + OAuth reconnect 401 clearing (#148).**
+  Two blocking bugs Aaron hit while smoke-testing rc.5. Both shipped
+  with regression + structural-contract tests.
+
+  - *SW update banner — clicking "Reload" did nothing.* The banner
+    relies on `vite-plugin-pwa`'s `useRegisterSW`, which arms its own
+    `controlling` listener inside `showSkipWaitingPrompt` to refresh
+    the page once the new SW takes over. In real PWAs (especially iOS
+    standalone, BFCache restores, and races where the listener gets
+    attached after the activation already fired) that event can be
+    silently missed and the click visibly does nothing. The banner
+    now wires its own `controllerchange` listener via
+    `reloadAfterServiceWorkerUpdate` in `src/lib/pwa.ts` **before**
+    sending `skipWaiting`, plus a 2.5s fallback `setTimeout` — whichever
+    signal lands first forces `window.location.reload()` exactly once.
+    Idempotent under double-clicks via a module-level "reload armed"
+    guard. Five unit tests pin the controllerchange path, the timeout
+    path, the both-fire-once contract, idempotency, and the
+    no-serviceWorker-container fallback; the UpdateBanner component
+    test pins that the click flow attaches the listener BEFORE asking
+    workbox to skipWaiting.
+
+  - *Vault 401 banner — reconnect completes but banner stays.* When
+    a vault was added standalone (e.g. `localhost:1940`) and the user
+    later reconnects via a hub-fronted issuer, the hub's token catalog
+    can resolve the vault to a different URL (`hub.example/vault/default`).
+    `addVault` then registers a NEW vault entry under a different id
+    via `vaultIdFromUrl`, switches `activeVaultId` to it, and clears
+    the halt for the new id — which was never halted in the first
+    place. The halt entry on the OLD vault id stayed in `localStorage`
+    forever, re-surfacing the banner on the next activeVault switch
+    or page reload. Fix: the reconnect button now threads the
+    currently-halted vault id through OAuth via
+    `PendingOAuthState.priorHaltedVaultId` (sessionStorage), and
+    `OAuthCallback` clears the halt for BOTH the new id AND the
+    originally-halted id on success. Three OAuthCallback tests pin
+    the same-URL baseline, the different-URL reconnect, and the
+    persistent-storage-survives-reload contract; one
+    VaultStatusBanner test pins that the reconnect button passes the
+    active vault id to `beginOAuth`; two `beginOAuth` tests pin the
+    sessionStorage round-trip on both code paths.
+
 ## [0.3.16-rc.5] - 2026-05-21
 
 - **fix(notes): header responsive under text-size scaling (#136).**
