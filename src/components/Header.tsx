@@ -19,21 +19,37 @@ export function Header() {
     setMenuOpen(false);
   }, [location.pathname]);
 
+  // Breakpoint note (notes#136): the inline-cluster mode used to start at
+  // `md` (768px), but 11 controls + a variable-width vault label fit poorly
+  // at that width even at default text-size — and at `larger`/`largest`
+  // text-size (which scales the html root font, and with it every rem-based
+  // gap / padding / text-size in Tailwind) the row overflowed `max-w-5xl`
+  // and clipped controls. The fix is two-part:
+  //   1. Move the inline-cluster threshold to `lg` (1024px) so tablet and
+  //      narrow-desktop widths use the hamburger menu (which lays out
+  //      vertically and never clips).
+  //   2. Inside the cluster, allow `flex-wrap` so the row gracefully
+  //      breaks to two lines if the user has scaled text up enough to
+  //      overflow even at lg+. Better to wrap than to truncate.
+  // The vault popover trigger label has its own truncation (max-w in rem,
+  // so it scales with text-size) so a long vault name compresses before
+  // its siblings get pushed off-screen.
   return (
     <header
       className="sticky top-0 z-10 border-b border-border bg-bg/90 backdrop-blur"
       style={{ paddingTop: "env(safe-area-inset-top)" }}
     >
-      <nav className="mx-auto flex max-w-5xl items-center justify-between gap-3 px-4 py-3 md:px-6 md:py-5">
+      <nav className="mx-auto flex max-w-5xl items-center justify-between gap-3 px-4 py-3 lg:px-6 lg:py-5">
         <Link
           to="/"
-          className="font-serif text-lg tracking-tight text-fg hover:text-accent md:text-xl"
+          className="min-w-0 shrink truncate font-serif text-lg tracking-tight text-fg hover:text-accent lg:text-xl"
         >
           Parachute Notes
         </Link>
 
-        {/* Desktop nav */}
-        <div className="hidden items-center gap-3 md:flex">
+        {/* Desktop nav — lg+ only. Wraps when text-size scaling pushes the
+            row past max-w-5xl rather than clipping (notes#136). */}
+        <div className="hidden min-w-0 flex-wrap items-center justify-end gap-x-3 gap-y-2 lg:flex">
           {hasVaults ? (
             <>
               <Link to="/" className="text-sm text-fg-muted hover:text-accent">
@@ -70,8 +86,9 @@ export function Header() {
           )}
         </div>
 
-        {/* Mobile cluster: sync status (always visible) + hamburger */}
-        <div className="flex items-center gap-2 md:hidden">
+        {/* Mobile + tablet + narrow-desktop cluster: sync status (always
+            visible) + hamburger. Visible up to lg per notes#136. */}
+        <div className="flex shrink-0 items-center gap-2 lg:hidden">
           {hasVaults ? <SyncStatusIndicator /> : null}
           <button
             type="button"
@@ -79,7 +96,7 @@ export function Header() {
             aria-label={menuOpen ? "Close menu" : "Open menu"}
             aria-expanded={menuOpen}
             aria-controls="mobile-menu"
-            className="flex h-10 w-10 items-center justify-center rounded-md border border-border bg-card text-fg-muted hover:text-accent"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-border bg-card text-fg-muted hover:text-accent"
           >
             <span aria-hidden="true" className="font-mono text-base leading-none">
               {menuOpen ? "✕" : "☰"}
@@ -89,7 +106,7 @@ export function Header() {
       </nav>
 
       {menuOpen ? (
-        <div id="mobile-menu" className="border-t border-border bg-bg/95 px-4 py-4 md:hidden">
+        <div id="mobile-menu" className="border-t border-border bg-bg/95 px-4 py-4 lg:hidden">
           {hasVaults ? (
             <div className="flex flex-col gap-3">
               <Link to="/graph" className="py-1 text-sm text-fg hover:text-accent">
@@ -104,7 +121,7 @@ export function Header() {
                 </span>
                 <VaultPopover variant="inline" />
               </div>
-              <div className="mt-1 flex items-center gap-3">
+              <div className="mt-1 flex flex-wrap items-center gap-3">
                 <InstallPrompt />
                 <TextSizeControl />
                 <ThemeToggle />
@@ -113,7 +130,7 @@ export function Header() {
           ) : (
             <div className="flex flex-col gap-3">
               <p className="text-sm text-fg-dim">No vault connected</p>
-              <div className="flex items-center gap-3">
+              <div className="flex flex-wrap items-center gap-3">
                 <InstallPrompt />
                 <TextSizeControl />
                 <ThemeToggle />

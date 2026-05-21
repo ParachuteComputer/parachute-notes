@@ -1,5 +1,30 @@
 # Changelog
 
+## [0.3.16-rc.5] - 2026-05-21
+
+- **fix(notes): header responsive under text-size scaling (#136).**
+  Surfaced during Aaron's testing of the global-zoom text-size landed in
+  0.3.15-rc.10/rc.11. At `larger`/`largest` the html root scales to
+  18–22px and every rem-based Tailwind size (gaps, padding, `text-sm`)
+  grows in lockstep — the 11-control inline cluster at `md:flex` (768px)
+  overflowed `max-w-5xl` and clipped controls. Two changes:
+
+  - *Cluster breakpoint moved from `md` (768px) to `lg` (1024px)*, so
+    tablet and narrow-desktop widths use the existing hamburger menu
+    (which lays out vertically and never clips). The cluster also gains
+    `flex-wrap` + `gap-y-2` so at lg+ a still-overflowing row wraps to a
+    second line rather than truncating.
+  - *Vault popover trigger gains a rem-based width cap* (`max-w-[12rem]`
+    + `truncate`). Long vault names now compress with ellipsis instead
+    of pushing chrome buttons off-screen. The cap is in rem so it
+    scales proportionally with text-size — a "12rem" label at `largest`
+    is still ~12rem visually, not a fixed-px shrinking target.
+
+  Mobile menu also gains `flex-wrap` on its chrome-buttons row so the
+  Install/TextSize/Theme triplet wraps cleanly on narrow phones at
+  largest text-size. Three new Header regression tests pin the `lg:`
+  breakpoint, the `flex-wrap` class, and the rem-based label cap.
+
 ## [0.3.16-rc.4] - 2026-05-21
 
 - **fix(notes): capture race + draft-saved indicator staleness (#135).**
