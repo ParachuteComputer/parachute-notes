@@ -72,7 +72,18 @@ export function OAuthCallback() {
         );
         if (token.services) saveServicesCatalog(id, token.services);
         // Reconnect succeeded — clear the halt so the banner disappears.
-        useAuthHaltStore.getState().clearHalt(id);
+        // Clear BOTH the new vault's id AND the originally-halted vault's id
+        // when the reconnect path stashed one on the pending state. The two
+        // can differ when the hub's token catalog resolves the vault to a
+        // different URL than what was stored — addVault then creates a new
+        // entry under a fresh id and the halt for the old id would otherwise
+        // be orphaned in localStorage and re-surface the next time the user
+        // switched back (notes#148).
+        const halt = useAuthHaltStore.getState();
+        halt.clearHalt(id);
+        if (pending.priorHaltedVaultId && pending.priorHaltedVaultId !== id) {
+          halt.clearHalt(pending.priorHaltedVaultId);
+        }
         navigate("/", { replace: true });
       } catch (err) {
         if (err instanceof PendingApprovalError) {

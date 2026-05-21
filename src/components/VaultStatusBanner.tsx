@@ -38,6 +38,7 @@ export function VaultStatusBanner() {
         reason={halt.reason}
         vaultIssuer={vault.issuer ?? vault.url}
         vaultScope={vault.scope}
+        vaultId={activeVaultId}
       />
     );
   if (reach && reach.state === "down")
@@ -49,7 +50,8 @@ function AuthHaltBanner({
   reason,
   vaultIssuer,
   vaultScope,
-}: { reason: string; vaultIssuer: string; vaultScope: string }) {
+  vaultId,
+}: { reason: string; vaultIssuer: string; vaultScope: string; vaultId: string }) {
   const [reconnecting, setReconnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [insecureContext, setInsecureContext] = useState(false);
@@ -62,7 +64,15 @@ function AuthHaltBanner({
       // Prefer the issuer we OAuthed against originally — under hub-as-issuer
       // that's the hub origin, not the vault URL. Falls back to the vault URL
       // for legacy standalone-vault records.
-      const { authorizeUrl } = await beginOAuth(vaultIssuer, vaultScope);
+      //
+      // Pass `priorHaltedVaultId` so OAuthCallback can clear THIS vault's halt
+      // on success — required because the token catalog may resolve the vault
+      // to a different URL than what's currently stored, in which case
+      // addVault creates a NEW vault entry with a different id and the halt
+      // for the old id would otherwise be orphaned in localStorage (notes#148).
+      const { authorizeUrl } = await beginOAuth(vaultIssuer, vaultScope, undefined, {
+        priorHaltedVaultId: vaultId,
+      });
       window.location.assign(authorizeUrl);
     } catch (err) {
       // Insecure-context surfaces with a structured remediation banner

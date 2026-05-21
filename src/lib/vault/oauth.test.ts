@@ -134,6 +134,29 @@ describe("beginOAuth", () => {
     await beginOAuth("http://localhost:1940", "vault:read", second);
     expect(second).toHaveBeenCalledTimes(2);
   });
+
+  it("stashes priorHaltedVaultId on the pending state for OAuthCallback to consume", async () => {
+    // notes#148 — the reconnect path threads the currently-halted vault id
+    // through the OAuth round-trip so the callback can clear THAT vault's
+    // halt entry on success, even when the new vault url resolves to a
+    // different vaultIdFromUrl. Pin the round-trip storage.
+    const fetchImpl = mockFetch([{ json: validMetadata }, { json: clientReg }]);
+    const { pending } = await beginOAuth("http://localhost:1940", "vault:read", fetchImpl, {
+      priorHaltedVaultId: "old-vault-id",
+    });
+    expect(pending.priorHaltedVaultId).toBe("old-vault-id");
+    const loaded = loadPendingOAuth();
+    expect(loaded?.priorHaltedVaultId).toBe("old-vault-id");
+  });
+
+  it("omits priorHaltedVaultId on the pending state when caller doesn't pass one", async () => {
+    // Cold-connect path from /add should never carry a stale halt id.
+    const fetchImpl = mockFetch([{ json: validMetadata }, { json: clientReg }]);
+    const { pending } = await beginOAuth("http://localhost:1940", "vault:read", fetchImpl);
+    expect(pending.priorHaltedVaultId).toBeUndefined();
+    const loaded = loadPendingOAuth();
+    expect(loaded?.priorHaltedVaultId).toBeUndefined();
+  });
 });
 
 describe("redirectUriForOrigin under VITE_BASE_PATH", () => {

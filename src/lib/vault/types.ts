@@ -152,4 +152,11 @@ export interface PendingOAuthState {
   redirectUri: string;
   scope: TokenScope;
   startedAt: string;
+  // Vault id that was halted at the time this OAuth flow began (notes#148).
+  // Carried so OAuthCallback can clear the originally-halted vault's halt
+  // entry on success — even when the hub's token catalog now resolves the
+  // vault to a different URL (different vaultIdFromUrl), which would leave
+  // the old halt orphaned in localStorage forever otherwise. Set by the
+  // reconnect-banner path; omitted for the cold connect flow from /add.
+  priorHaltedVaultId?: string;
 }

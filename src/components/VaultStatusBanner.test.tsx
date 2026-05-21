@@ -182,6 +182,28 @@ describe("VaultStatusBanner", () => {
     // of the auth-halt block shouldn't include it.
     expect(screen.queryByTestId("insecure-context-banner")).not.toBeInTheDocument();
   });
+
+  // notes#148 — the reconnect must thread the currently-halted vault id
+  // through beginOAuth so OAuthCallback can clear THIS vault's halt even
+  // when the token catalog resolves the reconnect to a different URL.
+  it("Reconnect passes the active vault id as priorHaltedVaultId to beginOAuth", async () => {
+    useAuthHaltStore.getState().markHalted("v", "session expired");
+    // Reject so we never reach `window.location.assign(authorizeUrl)` (jsdom
+    // doesn't allow stubbing it). We're only asserting the call shape into
+    // beginOAuth — what happens after the assign is the OAuthCallback test's
+    // territory and is pinned there directly.
+    const spy = vi.spyOn(oauthModule, "beginOAuth").mockRejectedValue(new Error("stub: stop here"));
+    renderBanner();
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /reconnect to vault/i }));
+    });
+    expect(spy).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.any(String),
+      undefined,
+      expect.objectContaining({ priorHaltedVaultId: "v" }),
+    );
+  });
 });
 
 describe("isLoopbackOrLocal", () => {
