@@ -1,6 +1,7 @@
 import { VaultPopover, buildVaultPopoverRows } from "@/components/VaultPopover";
 import type { HubVaultEntry } from "@/lib/vault/hub-discovery";
 import * as oauthModule from "@/lib/vault/oauth";
+import { InsecureContextError } from "@/lib/vault/pkce";
 import { useVaultStore } from "@/lib/vault/store";
 import type { VaultRecord } from "@/lib/vault/types";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
@@ -273,5 +274,81 @@ describe("VaultPopover (component)", () => {
     await waitFor(() =>
       expect(assignSpy).toHaveBeenCalledWith("http://localhost:1939/oauth/authorize?test"),
     );
+  });
+
+  // notes#143 follow-up: a refactor of the Connect handler could silently
+  // drop the InsecureContextError branch and the user would be back to the
+  // cryptic generic-error one-liner. Pin the wiring with a component-level
+  // test that doesn't depend on AddVault.
+  it("renders the InsecureContextBanner when beginOAuth throws InsecureContextError", async () => {
+    useVaultStore.setState({
+      vaults: {
+        v: makeVault({ id: "v", url: "http://localhost:1939/vault/default", name: "default" }),
+      },
+      activeVaultId: "v",
+    });
+    global.fetch = vi.fn(
+      async () =>
+        ({
+          ok: true,
+          status: 200,
+          json: async () => ({
+            vaults: [
+              { name: "default", url: "http://localhost:1939/vault/default", version: "0.1.0" },
+              { name: "techne", url: "http://localhost:1939/vault/techne", version: "0.1.0" },
+            ],
+            services: [],
+          }),
+        }) as Response,
+    ) as unknown as typeof fetch;
+    vi.spyOn(oauthModule, "beginOAuth").mockRejectedValue(
+      new InsecureContextError("insecure context"),
+    );
+
+    renderPopover();
+    fireEvent.click(screen.getByRole("button", { name: /active vault/i }));
+    await waitFor(() => expect(screen.getByText("techne")).toBeInTheDocument());
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /^Connect$/ }));
+    });
+
+    const banner = await screen.findByTestId("insecure-context-banner");
+    expect(banner).toHaveTextContent(/Insecure context/i);
+    expect(banner).toHaveTextContent(/HTTPS or accessed at/i);
+  });
+
+  it("does not render the InsecureContextBanner on a generic beginOAuth error", async () => {
+    useVaultStore.setState({
+      vaults: {
+        v: makeVault({ id: "v", url: "http://localhost:1939/vault/default", name: "default" }),
+      },
+      activeVaultId: "v",
+    });
+    global.fetch = vi.fn(
+      async () =>
+        ({
+          ok: true,
+          status: 200,
+          json: async () => ({
+            vaults: [
+              { name: "default", url: "http://localhost:1939/vault/default", version: "0.1.0" },
+              { name: "techne", url: "http://localhost:1939/vault/techne", version: "0.1.0" },
+            ],
+            services: [],
+          }),
+        }) as Response,
+    ) as unknown as typeof fetch;
+    vi.spyOn(oauthModule, "beginOAuth").mockRejectedValue(new Error("hub returned 502"));
+
+    renderPopover();
+    fireEvent.click(screen.getByRole("button", { name: /active vault/i }));
+    await waitFor(() => expect(screen.getByText("techne")).toBeInTheDocument());
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /^Connect$/ }));
+    });
+
+    // The dedicated banner stays hidden; the generic error line surfaces instead.
+    await waitFor(() => expect(screen.getByText(/hub returned 502/i)).toBeInTheDocument());
+    expect(screen.queryByTestId("insecure-context-banner")).not.toBeInTheDocument();
   });
 });

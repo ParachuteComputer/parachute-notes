@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.3.16-rc.3] - 2026-05-21
+
+- **test(notes): component-level insecure-context tests for VaultPopover
+  + VaultStatusBanner (#143 follow-up).** The rc.2 refactor pointed both
+  components at the relocated `InsecureContextBanner` but the only
+  insecure-context coverage lived in `AddVault.test.tsx`. Extends each
+  consumer's test file with focused tests pinned at the right
+  boundary: spy on `beginOAuth` and reject with `InsecureContextError`
+  to verify the dedicated banner renders, plus a negative test that a
+  generic `Error` falls through to the regular error UI (and not the
+  insecure-context banner). Catches future refactors that would
+  silently break the wiring.
+
 ## 0.3.16-rc.2 (2026-05-21)
 
 - **refactor(notes): move `InsecureContextBanner` to `src/components/`.**
