@@ -1,6 +1,6 @@
 {
   "name": "@openparachute/notes-ui",
-  "version": "0.1.0-rc.1",
+  "version": "0.1.0-rc.2",
   "private": false,
   "type": "module",
   "description": "Parachute Notes UI bundle — the SPA installed under parachute-app as the canonical first app. No daemon, no module surface; just the built dist/.",
@@ -26,6 +26,7 @@
   },
   "dependencies": {
     "@codemirror/commands": "^6.10.3",
+    "@openparachute/app-client": "link:@openparachute/app-client",
     "@codemirror/lang-markdown": "^6.5.0",
     "@codemirror/language": "^6.12.3",
     "@codemirror/state": "^6.6.0",
