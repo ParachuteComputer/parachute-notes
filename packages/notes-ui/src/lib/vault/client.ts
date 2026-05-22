@@ -4,35 +4,34 @@
  * Phase 2 of the notes-migration-to-app arc (parachute-app#6, design doc
  * section 16) moved the canonical `VaultClient` (with structured errors,
  * auto-refresh on 401/403, cursor pagination, reachability signals) into
- * `@openparachute/app-client`. The error classes + payload types are
- * re-exported below so existing import sites (`import { VaultAuthError,
- * VaultClient, ... } from "@/lib/vault/client"`) keep working without
- * per-file churn.
+ * `@openparachute/app-client`. notes#153 adopted those re-exports but
+ * kept a near-clone of the request loop here because app-client's
+ * `request*` methods were still `private`.
  *
- * Notes' subclass adds the methods app-client's surface doesn't carry
- * because Notes is the only consumer today:
+ * app-client 0.1.0-rc.3 lifted `request`, `requestWithRetry`, and
+ * `requestCursorWithRetry` to `protected` (parachute-app#10). This file
+ * now subclasses cleanly. Notes' subclass only adds the methods app-
+ * client's surface doesn't carry because Notes is the only consumer
+ * today:
  *
- *   - `renameTag` / `mergeTags` / `deleteTag` / `updateTag` —
- *     tag-curation endpoints (`/api/tags/:name/rename`,
- *     `/api/tags/merge`, `DELETE /api/tags/:name`, `PUT /api/tags/:name`
- *     with the legacy two-key body shape).
+ *   - `renameTag` / `mergeTags` / `deleteTag` — tag-curation endpoints
+ *     (`/api/tags/:name/rename`, `/api/tags/merge`, `DELETE
+ *     /api/tags/:name`). Not in app-client's surface; Notes' Tags page
+ *     is the only caller.
  *   - `listTagsWithSchema` — `/api/tags?include_schema=true`, used by
  *     the schema-audit runner (notes#129) to diff vault state against
  *     `NOTES_REQUIRED_SCHEMA`.
- *   - `linkAttachment` — Notes-only method that POSTs to the vault's
- *     attachments endpoint. Not part of app-client's surface (Notes-specific
- *     to its capture flow); once VaultClient.request lifts to `protected`
- *     in app-client, this can subclass cleanly.
+ *   - `linkAttachment` — Notes-only alias of base `addAttachment` (same
+ *     wire shape: POST `/api/notes/:id/attachments`). Kept because
+ *     callers throughout Notes use the `linkAttachment` name + semantic.
  *   - `fetchAttachmentBlob` — retry-aware GET of an attachment blob URL
- *     (for audio/image render), with the same `onAuthError`/`onReachability`
- *     plumbing as the JSON path.
- *
- * The shared request loop (auto-refresh on 401/403, reachability
- * signals, structured 4xx → typed errors) is intentionally still in this
- * file rather than reused via subclassing — app-client's `request` is
- * `private`, not `protected`. A follow-up (parachute-app/app-client) can
- * lift those methods to `protected` so this subclass shrinks to the
- * Notes-only extensions; tracked as a follow-up in the Phase 2 PR.
+ *     (audio/image render). The base class's `request*` loop parses
+ *     JSON; this method needs the raw Blob, so it carries its own thin
+ *     retry loop. The auth callbacks (`onAuthError` / `onAuthRevoked` /
+ *     `onReachability`) and token rotation are mirrored on the subclass
+ *     during construction so the blob path can drive them without
+ *     reaching into the base's private fields. The shared JSON request
+ *     loop on the base class is no longer duplicated.
  */
 
 import {
@@ -42,17 +41,16 @@ import {
   VaultTargetExistsError as AppClientVaultTargetExistsError,
   VaultUnreachableError as AppClientVaultUnreachableError,
   VaultUploadError as AppClientVaultUploadError,
+  VaultClient as BaseVaultClient,
+  type VaultClientOptions as BaseVaultClientOptions,
 } from "@openparachute/app-client";
 import type {
   CreateNotePayload,
-  Note,
   NoteAttachment,
   ReachabilitySignal,
   StorageUploadResult,
-  TagSummary,
   UpdateNotePayload,
   UploadProgress,
-  VaultInfo,
 } from "./types";
 
 // Error classes + payload types are re-exports from app-client — Phase 2
@@ -91,210 +89,63 @@ export const STORAGE_ALLOWED_EXTENSIONS = new Set([
   "webp",
 ]);
 
-export interface VaultClientOptions {
-  vaultUrl: string;
-  accessToken: string;
-  fetchImpl?: typeof fetch;
-  xhrFactory?: () => XMLHttpRequest;
-  // Invoked when the vault returns 401/403. Should attempt a refresh-token
-  // exchange and return the fresh access token, or `null` if refresh is not
-  // possible (legacy `pvt_*` token, no refresh token, or refresh failed).
-  // Without this, the first 401 throws immediately — same behaviour as before
-  // hub-as-issuer landed.
-  onAuthError?: () => Promise<string | null>;
-  // Invoked when a 401/403 ultimately can't be recovered: either there was no
-  // refresh callback, or the post-refresh retry also got a 401/403 (the new
-  // token is dead too). Lets callers mark the vault as needing reconnect —
-  // distinct from `onAuthError`'s job, which is to attempt refresh. Skipped
-  // when `onAuthError` returned null because that path is expected to record
-  // its own halt with a more specific reason (see refresh.ts).
-  onAuthRevoked?: (status: number) => void;
-  // Fires on every fetch outcome with a coarse reachability signal so an
-  // owner store (reachability-store.ts) can run its `healthy → retrying → down`
-  // state machine in one place. Receives "healthy" on any 2xx/4xx response
-  // (the vault answered — auth/conflict/not-found are still reachable),
-  // "unreachable" on 5xx + network failures (gone / mid-restart / proxy down).
-  // Side-effect free here; all hysteresis, backoff, and UI promotion lives in
-  // the store.
-  onReachability?: (signal: ReachabilitySignal, reason?: string) => void;
-}
+export type VaultClientOptions = BaseVaultClientOptions;
 
-export class VaultClient {
-  private readonly baseUrl: string;
-  // Mutable so a successful refresh-on-401 retry can rotate the in-memory
-  // token without requiring callers to rebuild the client.
-  private token: string;
-  private readonly fetchImpl: typeof fetch;
-  private readonly xhrFactory: () => XMLHttpRequest;
-  private readonly onAuthError?: () => Promise<string | null>;
-  private readonly onAuthRevoked?: (status: number) => void;
-  private readonly onReachability?: (signal: ReachabilitySignal, reason?: string) => void;
+/**
+ * Notes' VaultClient — subclasses app-client's canonical implementation
+ * and adds the handful of Notes-only endpoints (tag curation,
+ * `linkAttachment`, blob fetch).
+ *
+ * Every method on the base class (`vaultInfo`, `queryNotes`, `getNote`,
+ * `createNote`, `updateNote`, `deleteNote`, `listTags`, `addAttachment`,
+ * `listAttachments`, `deleteAttachment`, `uploadStorageFile`,
+ * `storageUrl`, `setAccessToken`, `vaultBaseUrl`) is inherited unchanged
+ * — no per-method re-declaration here.
+ */
+export class VaultClient extends BaseVaultClient {
+  // Mirror of the base class's private blob-loop dependencies. The base
+  // exposes `request*` as protected so JSON paths inherit cleanly, but
+  // the underlying `token` / `fetchImpl` / `onAuth*` / `onReachability`
+  // remain private — the blob path can't reach them. We capture the
+  // same fields on the subclass at construction so `fetchAttachmentBlob`
+  // can run its own retry loop without re-exposing private base state.
+  //
+  // `currentToken` shadows the base's token. The base rotates its own
+  // copy on a refresh, and `setAccessToken` (inherited) rotates the
+  // base; we override `setAccessToken` to keep both in sync. The blob
+  // path's own 401 handler also rotates this field directly.
+  private currentToken: string;
+  private readonly currentFetchImpl: typeof fetch;
+  private readonly currentOnAuthError?: () => Promise<string | null>;
+  private readonly currentOnAuthRevoked?: (
+    status: number,
+    detail?: { errorType?: string; message?: string },
+  ) => void;
+  private readonly currentOnReachability?: (signal: ReachabilitySignal, reason?: string) => void;
 
   constructor(opts: VaultClientOptions) {
-    this.baseUrl = opts.vaultUrl.replace(/\/$/, "");
-    this.token = opts.accessToken;
-    this.fetchImpl = opts.fetchImpl ?? fetch.bind(globalThis);
-    this.xhrFactory = opts.xhrFactory ?? (() => new XMLHttpRequest());
-    this.onAuthError = opts.onAuthError;
-    this.onAuthRevoked = opts.onAuthRevoked;
-    this.onReachability = opts.onReachability;
+    super(opts);
+    this.currentToken = opts.accessToken;
+    this.currentFetchImpl = opts.fetchImpl ?? fetch.bind(globalThis);
+    if (opts.onAuthError !== undefined) this.currentOnAuthError = opts.onAuthError;
+    if (opts.onAuthRevoked !== undefined) this.currentOnAuthRevoked = opts.onAuthRevoked;
+    if (opts.onReachability !== undefined) this.currentOnReachability = opts.onReachability;
   }
 
-  get vaultBaseUrl(): string {
-    return this.baseUrl;
+  /**
+   * Keep the subclass's shadow token in sync with the base's so the
+   * blob path uses the latest credential on the next call. Inherited
+   * `setAccessToken` already rotates the base's copy; we override to
+   * also rotate ours.
+   */
+  override setAccessToken(token: string): void {
+    super.setAccessToken(token);
+    this.currentToken = token;
   }
 
-  private async request<T>(path: string, init: RequestInit = {}): Promise<T> {
-    return this.requestWithRetry<T>(path, init, true);
-  }
+  // ---------- Notes-only tag-curation endpoints ----------
 
-  private async requestWithRetry<T>(
-    path: string,
-    init: RequestInit,
-    allowRetry: boolean,
-  ): Promise<T> {
-    const headers = new Headers(init.headers);
-    headers.set("Authorization", `Bearer ${this.token}`);
-    headers.set("Accept", "application/json");
-    if (init.body && !headers.has("Content-Type")) {
-      headers.set("Content-Type", "application/json");
-    }
-
-    let res: Response;
-    try {
-      res = await this.fetchImpl(`${this.baseUrl}${path}`, { ...init, headers });
-    } catch (err) {
-      // Network-level failure: ECONNREFUSED, DNS failure, fetch TypeError,
-      // CORS pre-flight reject. The vault is unreachable from the browser's
-      // perspective; surface it as such and let the reachability store decide
-      // when to promote to "down". Don't swallow AbortError — that's a caller
-      // (offline-fallback timer, useEffect cleanup) deliberately cancelling.
-      if (err instanceof DOMException && err.name === "AbortError") throw err;
-      const message = err instanceof Error ? err.message : String(err);
-      this.onReachability?.("unreachable", message);
-      throw new VaultUnreachableError(`${init.method ?? "GET"} ${path} failed: ${message}`, 0);
-    }
-
-    // 5xx = the server (or the hub fronting it) responded with a failure that
-    // isn't auth or our request shape — usually "vault not running" /
-    // "mid-restart" / "proxy upstream timeout". Treat as unreachable;
-    // VaultUnreachableError so React Query can skip retries once the store
-    // crosses its threshold.
-    if (res.status >= 500) {
-      this.onReachability?.("unreachable", `HTTP ${res.status}`);
-      throw new VaultUnreachableError(
-        `${init.method ?? "GET"} ${path} → ${res.status}`,
-        res.status,
-      );
-    }
-
-    // Any non-5xx response means the vault is talking to us — even auth
-    // failures or 404s — so reset the reachability counter.
-    this.onReachability?.("healthy");
-
-    if (res.status === 401 || res.status === 403) {
-      if (allowRetry && this.onAuthError) {
-        const fresh = await this.onAuthError();
-        if (fresh) {
-          this.token = fresh;
-          return this.requestWithRetry<T>(path, init, false);
-        }
-        // onAuthError returned null — refresh.ts will already have recorded
-        // its own halt with a specific reason if appropriate; don't double-mark.
-      } else {
-        // No refresh path, or we're on the post-refresh retry and the new
-        // token also failed. Either way, the credentials we have are dead.
-        this.onAuthRevoked?.(res.status);
-      }
-      throw new VaultAuthError(`Vault rejected the token (${res.status})`, res.status);
-    }
-    if (res.status === 404) {
-      throw new VaultNotFoundError(`${init.method ?? "GET"} ${path} → 404`);
-    }
-    if (res.status === 409 || res.status === 428) {
-      // 409 = baseline mismatch (sent stale `if_updated_at`); 428 = baseline
-      // missing (didn't send `if_updated_at` and `force` wasn't set). Both
-      // recover the same way — refetch the note for a fresh baseline and
-      // retry — so we collapse them into one error class.
-      const body = (await res.json().catch(() => ({}))) as {
-        error?: string;
-        target?: string;
-        message?: string;
-        current_updated_at?: string | null;
-        expected_updated_at?: string | null;
-      };
-      // The vault's tag-rename endpoint returns `{error:"target_exists",...}`
-      // for name-collision; the note PATCH endpoint returns the
-      // current_updated_at/expected_updated_at shape. Different failure modes,
-      // same HTTP status — distinguish by body shape.
-      if (body.error === "target_exists" && typeof body.target === "string") {
-        throw new VaultTargetExistsError(body.target, body.message);
-      }
-      throw new VaultConflictError(body);
-    }
-    if (!res.ok) {
-      const text = await res.text();
-      throw new Error(`${init.method ?? "GET"} ${path} failed (${res.status}): ${text}`);
-    }
-    if (res.status === 204) return undefined as T;
-    return (await res.json()) as T;
-  }
-
-  async vaultInfo(includeStats = true): Promise<VaultInfo> {
-    const query = includeStats ? "?include_stats=true" : "";
-    return this.request<VaultInfo>(`/api/vault${query}`);
-  }
-
-  async queryNotes(params: URLSearchParams): Promise<Note[]> {
-    const qs = params.toString();
-    return this.request<Note[]>(`/api/notes${qs ? `?${qs}` : ""}`);
-  }
-
-  async getNote(
-    id: string,
-    opts: { includeLinks?: boolean; includeAttachments?: boolean } = {},
-  ): Promise<Note | null> {
-    const params = new URLSearchParams({ id, include_content: "true" });
-    if (opts.includeLinks) params.set("include_links", "true");
-    if (opts.includeAttachments) params.set("include_attachments", "true");
-    const rows = await this.request<Note[] | Note>(`/api/notes?${params.toString()}`);
-    // The vault may return either a single note (when id is passed) or an array.
-    if (Array.isArray(rows)) return rows[0] ?? null;
-    return rows ?? null;
-  }
-
-  async updateNote(
-    id: string,
-    payload: UpdateNotePayload,
-    opts: { signal?: AbortSignal } = {},
-  ): Promise<Note> {
-    return this.request<Note>(`/api/notes/${encodeURIComponent(id)}`, {
-      method: "PATCH",
-      body: JSON.stringify(payload),
-      signal: opts.signal,
-    });
-  }
-
-  async createNote(payload: CreateNotePayload, opts: { signal?: AbortSignal } = {}): Promise<Note> {
-    return this.request<Note>("/api/notes", {
-      method: "POST",
-      body: JSON.stringify(payload),
-      signal: opts.signal,
-    });
-  }
-
-  async deleteNote(id: string, opts: { signal?: AbortSignal } = {}): Promise<void> {
-    await this.request<{ deleted: boolean; id: string } | undefined>(
-      `/api/notes/${encodeURIComponent(id)}`,
-      { method: "DELETE", signal: opts.signal },
-    );
-  }
-
-  async listTags(): Promise<TagSummary[]> {
-    return this.request<TagSummary[]>("/api/tags");
-  }
-
-  // Same as listTags but with the full tag-identity record per row
+  // `listTags` but with the full tag-identity record per row
   // (description, parent_names, etc). Used by the schema-audit path
   // (notes#129) to diff vault state against `NOTES_REQUIRED_SCHEMA`.
   async listTagsWithSchema(): Promise<
@@ -311,24 +162,6 @@ export class VaultClient {
   async deleteTag(name: string): Promise<void> {
     await this.request<undefined>(`/api/tags/${encodeURIComponent(name)}`, {
       method: "DELETE",
-    });
-  }
-
-  // Upsert a tag-identity row. `description`, `parent_names`, `fields`,
-  // `relationships` are all field-merged on the vault side — omitted keys
-  // preserve prior values, explicit `null` clears them. Idempotent: calling
-  // with the same payload as-stored is a no-op write. Used by the surface
-  // schema-ensure path (lib/vault/schema.ts → schema-ensure.ts).
-  async updateTag(
-    name: string,
-    body: {
-      description?: string | null;
-      parent_names?: string[] | null;
-    },
-  ): Promise<void> {
-    await this.request<undefined>(`/api/tags/${encodeURIComponent(name)}`, {
-      method: "PUT",
-      body: JSON.stringify(body),
     });
   }
 
@@ -349,64 +182,15 @@ export class VaultClient {
     });
   }
 
-  uploadStorageFile(
-    file: File,
-    opts: {
-      onProgress?: (p: UploadProgress) => void;
-      signal?: AbortSignal;
-    } = {},
-  ): Promise<StorageUploadResult> {
-    return new Promise((resolve, reject) => {
-      const xhr = this.xhrFactory();
-      const form = new FormData();
-      form.append("file", file);
+  // ---------- Notes-only attachment helpers ----------
 
-      xhr.open("POST", `${this.baseUrl}/api/storage/upload`);
-      xhr.setRequestHeader("Authorization", `Bearer ${this.token}`);
-      xhr.setRequestHeader("Accept", "application/json");
-
-      if (opts.onProgress && xhr.upload) {
-        xhr.upload.onprogress = (e) => {
-          if (e.lengthComputable) opts.onProgress?.({ loaded: e.loaded, total: e.total });
-        };
-      }
-
-      xhr.onload = () => {
-        if (xhr.status === 401 || xhr.status === 403) {
-          reject(new VaultAuthError(`Vault rejected the token (${xhr.status})`, xhr.status));
-          return;
-        }
-        if (xhr.status < 200 || xhr.status >= 300) {
-          let message = `Upload failed (${xhr.status})`;
-          try {
-            const body = JSON.parse(xhr.responseText) as { error?: string };
-            if (body.error) message = body.error;
-          } catch {}
-          reject(new VaultUploadError(message, xhr.status));
-          return;
-        }
-        try {
-          resolve(JSON.parse(xhr.responseText) as StorageUploadResult);
-        } catch (e) {
-          reject(e instanceof Error ? e : new Error("Invalid upload response"));
-        }
-      };
-
-      xhr.onerror = () => reject(new VaultUploadError("Network error during upload", 0));
-      xhr.onabort = () => reject(new DOMException("Upload aborted", "AbortError"));
-
-      if (opts.signal) {
-        if (opts.signal.aborted) {
-          xhr.abort();
-          return;
-        }
-        opts.signal.addEventListener("abort", () => xhr.abort(), { once: true });
-      }
-
-      xhr.send(form);
-    });
-  }
-
+  /**
+   * Notes-only alias of the base's `addAttachment` (same wire shape:
+   * POST `/api/notes/:id/attachments`). Callers throughout Notes use
+   * the `linkAttachment` name; preserving the alias avoids a sweeping
+   * rename and keeps the semantic distinction (link an already-uploaded
+   * blob to a note, vs. "add" which the base names generically).
+   */
   async linkAttachment(
     noteIdOrPath: string,
     body: { path: string; mimeType: string; transcribe?: boolean },
@@ -417,28 +201,22 @@ export class VaultClient {
     );
   }
 
-  async listAttachments(noteIdOrPath: string): Promise<NoteAttachment[]> {
-    return this.request<NoteAttachment[]>(
-      `/api/notes/${encodeURIComponent(noteIdOrPath)}/attachments`,
-    );
-  }
-
-  async deleteAttachment(noteIdOrPath: string, attachmentId: string): Promise<void> {
-    await this.request<undefined>(
-      `/api/notes/${encodeURIComponent(noteIdOrPath)}/attachments/${encodeURIComponent(attachmentId)}`,
-      { method: "DELETE" },
-    );
-  }
-
-  storageUrl(path: string): string {
-    const trimmed = path.startsWith("/") ? path.slice(1) : path;
-    return `${this.baseUrl}/api/storage/${trimmed}`;
-  }
-
+  /**
+   * Retry-aware GET of an attachment blob URL — used by audio/image
+   * render paths (NoteView, VaultImage). Mirrors the base class's
+   * refresh-on-401 behavior on the blob path: a 401/403 triggers
+   * `onAuthError` once, and the retry uses the rotated token.
+   *
+   * Carries its own retry loop because the base's `request*` always
+   * `res.json()`s the body — which would corrupt an audio/image Blob.
+   * The shape is identical to `requestWithRetry`'s auth/reachability
+   * branches; the auth callbacks and token state are captured on the
+   * subclass at construction (see field declarations above).
+   */
   async fetchAttachmentBlob(url: string): Promise<Blob> {
     const target = url.startsWith("http")
       ? url
-      : `${this.baseUrl}${url.startsWith("/") ? "" : "/"}${url}`;
+      : `${this.vaultBaseUrl}${url.startsWith("/") ? "" : "/"}${url}`;
     return this.fetchBlobWithRetry(target, url, true);
   }
 
@@ -449,32 +227,35 @@ export class VaultClient {
   ): Promise<Blob> {
     let res: Response;
     try {
-      res = await this.fetchImpl(target, {
-        headers: { Authorization: `Bearer ${this.token}` },
+      res = await this.currentFetchImpl(target, {
+        headers: { Authorization: `Bearer ${this.currentToken}` },
       });
     } catch (err) {
       if (err instanceof DOMException && err.name === "AbortError") throw err;
       const message = err instanceof Error ? err.message : String(err);
-      this.onReachability?.("unreachable", message);
+      this.currentOnReachability?.("unreachable", message);
       throw new VaultUnreachableError(`GET ${originalUrl} failed: ${message}`, 0);
     }
     if (res.status >= 500) {
-      this.onReachability?.("unreachable", `HTTP ${res.status}`);
+      this.currentOnReachability?.("unreachable", `HTTP ${res.status}`);
       throw new VaultUnreachableError(`GET ${originalUrl} → ${res.status}`, res.status);
     }
-    this.onReachability?.("healthy");
+    this.currentOnReachability?.("healthy");
     if (res.status === 401 || res.status === 403) {
-      if (allowRetry && this.onAuthError) {
-        const fresh = await this.onAuthError();
+      if (allowRetry && this.currentOnAuthError) {
+        const fresh = await this.currentOnAuthError();
         if (fresh) {
-          this.token = fresh;
+          this.currentToken = fresh;
+          // Keep the base's token in sync so subsequent inherited JSON
+          // calls also see the rotated token.
+          super.setAccessToken(fresh);
           return this.fetchBlobWithRetry(target, originalUrl, false);
         }
         // onAuthError returned null — refresh.ts owns the halt path.
       } else {
         // No refresh path, or post-refresh retry still 401/403. Mirror
         // requestWithRetry so attachment loads also surface the banner.
-        this.onAuthRevoked?.(res.status);
+        this.currentOnAuthRevoked?.(res.status);
       }
       throw new VaultAuthError(`Vault rejected the token (${res.status})`, res.status);
     }

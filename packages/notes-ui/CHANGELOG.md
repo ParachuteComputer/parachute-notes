@@ -1,5 +1,31 @@
 # Changelog — @openparachute/notes-ui
 
+## [0.1.0-rc.3] - 2026-05-22
+
+- **Refactor: `VaultClient` subclasses `@openparachute/app-client`'s
+  base class** (closes notes#153 reviewer follow-up). app-client
+  0.1.0-rc.3 lifted `request`, `requestWithRetry`, and
+  `requestCursorWithRetry` to `protected` ([parachute-app#10][app10]),
+  so Notes' VaultClient can finally subclass cleanly instead of cloning
+  the request loop. Net ~220 lines deleted from `client.ts` and ~690
+  from `client.test.ts` (base-class tests now covered by app-client's
+  own suite); the Notes-specific surface (`renameTag`, `mergeTags`,
+  `deleteTag`, `listTagsWithSchema`, `linkAttachment`,
+  `fetchAttachmentBlob`) stays on the subclass.
+
+  Notes' previous narrow-shape `updateTag` override was dropped — the
+  base class's wider `TagUpsertPayload`-shaped `updateTag` accepts the
+  same `{description, parent_names}` Notes was already passing, and
+  `schema-ensure.ts` (the only caller) ignores the return value.
+
+  Bundle delta: +3.8 kB raw / +0.9 kB gzip on the main chunk (the
+  subclass mirrors a handful of auth-callback fields on the instance
+  so `fetchAttachmentBlob` can drive its own retry loop without
+  reaching into the base's `private` state — see file header for
+  the rationale).
+
+[app10]: https://github.com/ParachuteComputer/parachute-app/pull/10
+
 ## [0.1.0-rc.2] - 2026-05-22
 
 - **Adopt `@openparachute/app-client`** (Phase 2 of the notes-migration-
