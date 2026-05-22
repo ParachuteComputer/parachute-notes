@@ -190,15 +190,16 @@ export class VaultClient extends BaseVaultClient {
    * the `linkAttachment` name; preserving the alias avoids a sweeping
    * rename and keeps the semantic distinction (link an already-uploaded
    * blob to a note, vs. "add" which the base names generically).
+   *
+   * Thin delegation to `addAttachment` so any future wire-shape change
+   * on the base (extra fields, header additions) carries through
+   * automatically rather than drifting between the two implementations.
    */
   async linkAttachment(
     noteIdOrPath: string,
     body: { path: string; mimeType: string; transcribe?: boolean },
   ): Promise<NoteAttachment> {
-    return this.request<NoteAttachment>(
-      `/api/notes/${encodeURIComponent(noteIdOrPath)}/attachments`,
-      { method: "POST", body: JSON.stringify(body) },
-    );
+    return this.addAttachment(noteIdOrPath, body);
   }
 
   /**
@@ -242,6 +243,22 @@ export class VaultClient extends BaseVaultClient {
     }
     this.currentOnReachability?.("healthy");
     if (res.status === 401 || res.status === 403) {
+      // Mirror the base's requestWithRetry: parse the body BEFORE the
+      // refresh-and-retry branch so the detail attached to
+      // `onAuthRevoked` matches notes#150's enhanced-error shape
+      // (`error_type` + `message`).
+      const bodyText = await res.text().catch(() => "");
+      let errorType: string | undefined;
+      let serverMessage: string | undefined;
+      if (bodyText) {
+        try {
+          const parsed = JSON.parse(bodyText) as { error_type?: unknown; message?: unknown };
+          if (typeof parsed.error_type === "string") errorType = parsed.error_type;
+          if (typeof parsed.message === "string") serverMessage = parsed.message;
+        } catch {
+          // Non-JSON body — leave detail undefined.
+        }
+      }
       if (allowRetry && this.currentOnAuthError) {
         const fresh = await this.currentOnAuthError();
         if (fresh) {
@@ -254,8 +271,9 @@ export class VaultClient extends BaseVaultClient {
         // onAuthError returned null — refresh.ts owns the halt path.
       } else {
         // No refresh path, or post-refresh retry still 401/403. Mirror
-        // requestWithRetry so attachment loads also surface the banner.
-        this.currentOnAuthRevoked?.(res.status);
+        // requestWithRetry so attachment loads also surface the banner
+        // with the same `{ errorType, message }` detail shape.
+        this.currentOnAuthRevoked?.(res.status, { errorType, message: serverMessage });
       }
       throw new VaultAuthError(`Vault rejected the token (${res.status})`, res.status);
     }

@@ -269,7 +269,10 @@ describe("VaultClient (Notes subclass) — fetchAttachmentBlob", () => {
       VaultAuthError,
     );
     expect(onAuthRevoked).toHaveBeenCalledTimes(1);
-    expect(onAuthRevoked).toHaveBeenCalledWith(401);
+    expect(onAuthRevoked).toHaveBeenCalledWith(401, {
+      errorType: undefined,
+      message: undefined,
+    });
   });
 
   it("calls onAuthRevoked when there is no refresh callback wired", async () => {
@@ -284,7 +287,36 @@ describe("VaultClient (Notes subclass) — fetchAttachmentBlob", () => {
     await expect(client.fetchAttachmentBlob("/api/storage/foo.mp3")).rejects.toBeInstanceOf(
       VaultAuthError,
     );
-    expect(onAuthRevoked).toHaveBeenCalledWith(401);
+    expect(onAuthRevoked).toHaveBeenCalledWith(401, {
+      errorType: undefined,
+      message: undefined,
+    });
+  });
+
+  it("forwards parsed error_type + message to onAuthRevoked when the body carries enhanced-error detail", async () => {
+    const fetchImpl = mockBlobFetch([
+      {
+        status: 403,
+        body: JSON.stringify({
+          error_type: "token_revoked",
+          message: "session ended elsewhere",
+        }),
+      },
+    ]);
+    const onAuthRevoked = vi.fn();
+    const client = new VaultClient({
+      vaultUrl: "http://localhost:1940",
+      accessToken: "pvt_legacy",
+      fetchImpl,
+      onAuthRevoked,
+    });
+    await expect(client.fetchAttachmentBlob("/api/storage/foo.mp3")).rejects.toBeInstanceOf(
+      VaultAuthError,
+    );
+    expect(onAuthRevoked).toHaveBeenCalledWith(403, {
+      errorType: "token_revoked",
+      message: "session ended elsewhere",
+    });
   });
 
   it("does NOT call onAuthRevoked when onAuthError returned null — refresh.ts owns that halt", async () => {
