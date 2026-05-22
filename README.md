@@ -1,79 +1,31 @@
-# Parachute Notes
+# parachute-notes
 
-The default frontend for [Parachute](https://parachute.computer). Browse, edit, and capture in any [Parachute Vault](https://github.com/ParachuteComputer/parachute-vault).
+Monorepo for Parachute Notes. Two npm publish targets, one shared source.
 
-Parachute Notes is a static single-page app that speaks directly to your vault over its HTTP API. Point it at any vault URL, do OAuth, and browse, edit, create, and visualize your notes. No opinion about how you organize your vault — just a clear window onto what's there.
+| Package | Publishes as | Role |
+|---|---|---|
+| [`packages/notes-ui`](./packages/notes-ui) | `@openparachute/notes-ui` | UI bundle only. Installed under [parachute-app](https://github.com/ParachuteComputer/parachute-app) as the canonical first app. |
+| [`packages/notes-daemon`](./packages/notes-daemon) | `@openparachute/notes` | Module-shaped wrapper that hub installs via `parachute install notes`. Ships notes-ui's `dist/` + `.parachute/module.json`. |
 
-## Status
+The two publish in parallel during the migration arc (see [design Section 16][s16]). Phase 1 (this layout) makes notes-ui available without disrupting the existing module. Phase 2 deprecates the module form. Phase 3 retires it.
 
-v1 shipped; v0.2 in progress — offline-capable PWA. Public HTTPS exposure + the mobile-PWA install flow are under active polish for broad launch in the next few weeks. Today's smooth path is desktop-browser-on-localhost after `parachute install notes`.
+[s16]: https://github.com/ParachuteComputer/parachute.computer/blob/main/design/2026-05-21-parachute-apps-design.md#16-notes-migration-to-app
 
-## Install Parachute Notes
+## Working in this repo
 
-Parachute Notes is installable as a Progressive Web App. Once installed, it runs in its own window, launches from your home screen or dock, and (from v0.2 onward) keeps working when you're offline.
-
-- **Desktop Chrome / Edge** — visit your hosted Parachute Notes, click **Install app** in the header, or use the browser's install icon in the address bar.
-- **Android Chrome** — tap **Install app**, or use the browser menu → **Install app**.
-- **iOS Safari** — tap the Share icon, then **Add to Home Screen**. (Safari doesn't expose a JS install prompt, so Parachute Notes shows a hint with the steps.)
-
-A few iOS quirks worth knowing:
-
-- iOS caps PWA storage at roughly 50 MB per app.
-- Apple may evict data from a PWA that hasn't been opened in a while.
-- There is no `beforeinstallprompt` event on iOS — the Add to Home Screen flow is manual.
-
-## Quick start
-
-```sh
-bun install
-bun run dev
+```
+bun install                # workspace install (bun's --filter is what scripts dispatch through)
+bun run dev                # vite dev for notes-ui
+bun run build              # builds notes-ui dist/, then copies it into notes-daemon/dist
+bun run test               # notes-ui vitest suite (842 tests), then notes-daemon smoke test
+bun run typecheck          # notes-ui only — daemon has no TS source
+bun run lint               # biome over notes-ui
 ```
 
-Open the dev URL, paste your vault URL, connect.
+The development guide, mount-path convention, tag-roles primitive, and per-vault settings doc all live in [`packages/notes-daemon/README.md`](./packages/notes-daemon/README.md) — that's where the SPA + module surface is documented end-to-end.
 
-## What it gives you
+## Release flow
 
-- Multi-vault support — switch between vaults, tokens stored per vault
-- Note list with search, tag and path filters
-- Note view with rendered markdown, metadata, resolved `[[wikilinks]]`
-- Markdown editor with live preview, attachments (drag, drop, paste)
-- Create and delete notes
-- Tag index at `/tags` — browse and click through to filtered note lists
-- Neighborhood graph on each note (via the vault's `near` query)
-- Full-vault graph at `/graph` with search and tag filters
-- Theme matched to Parachute's visual language — system, light, or dark; toggle in the header
-- Offline-capable mutations (plumbing) — create / update / delete / attachment actions issued offline are queued in IndexedDB (with OPFS for blobs when available) and drained when the vault comes back in reach. Conflicts are stashed for human resolution; auth errors halt the drain until you reconnect. UI for the queue ships in a later PR.
+Pre-1.0 governance applies: every code-touching PR bumps the rc chain. Both packages bump in lockstep on a structural-restructure PR like this one; thereafter they bump independently. See [parachute-patterns/patterns/governance.md][gov] for the canonical rules.
 
-## Build from source
-
-```sh
-bun install
-bun run build
-# static output in dist/ — host anywhere
-```
-
-## Development
-
-Vite + React 19 + TypeScript (strict), Tailwind CSS v4, Biome for lint/format, Vitest + Testing Library for tests.
-
-```sh
-bun run dev         # dev server
-bun run typecheck   # tsc --noEmit across the project references
-bun run lint        # biome check
-bun run lint:fix    # biome check --write
-bun run test        # vitest run
-bun run build       # tsc -b && vite build
-```
-
-By default the dev server binds to localhost and rejects Host headers it
-doesn't recognize. Set `VITE_EXPOSE=true` to bind to all interfaces and accept
-any Host — useful when reaching the dev server from another device on your
-tailnet:
-
-```sh
-VITE_EXPOSE=true bun run dev
-```
-
-## License
-
-AGPL-3.0 — same as Parachute Vault.
+[gov]: https://github.com/ParachuteComputer/parachute-patterns/blob/main/patterns/governance.md
