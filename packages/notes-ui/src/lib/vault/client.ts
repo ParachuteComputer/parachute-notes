@@ -1,5 +1,80 @@
-import type { Note, NoteAttachment, TagSummary, VaultInfo } from "./types";
+/**
+ * Notes' vault REST client.
+ *
+ * Phase 2 of the notes-migration-to-app arc (parachute-app#6, design doc
+ * section 16) moved the canonical `VaultClient` (with structured errors,
+ * auto-refresh on 401/403, cursor pagination, reachability signals) into
+ * `@openparachute/app-client`. The error classes + payload types are
+ * re-exported below so existing import sites (`import { VaultAuthError,
+ * VaultClient, ... } from "@/lib/vault/client"`) keep working without
+ * per-file churn.
+ *
+ * Notes' subclass adds the methods app-client's surface doesn't carry
+ * because Notes is the only consumer today:
+ *
+ *   - `renameTag` / `mergeTags` / `deleteTag` / `updateTag` —
+ *     tag-curation endpoints (`/api/tags/:name/rename`,
+ *     `/api/tags/merge`, `DELETE /api/tags/:name`, `PUT /api/tags/:name`
+ *     with the legacy two-key body shape).
+ *   - `listTagsWithSchema` — `/api/tags?include_schema=true`, used by
+ *     the schema-audit runner (notes#129) to diff vault state against
+ *     `NOTES_REQUIRED_SCHEMA`.
+ *   - `linkAttachment` — alias for app-client's `addAttachment`; kept
+ *     so call sites that import the historical name don't churn.
+ *   - `fetchAttachmentBlob` — retry-aware GET of an attachment blob URL
+ *     (for audio/image render), with the same `onAuthError`/`onReachability`
+ *     plumbing as the JSON path.
+ *
+ * The shared request loop (auto-refresh on 401/403, reachability
+ * signals, structured 4xx → typed errors) is intentionally still in this
+ * file rather than reused via subclassing — app-client's `request` is
+ * `private`, not `protected`. A follow-up (parachute-app/app-client) can
+ * lift those methods to `protected` so this subclass shrinks to the
+ * Notes-only extensions; tracked as a follow-up in the Phase 2 PR.
+ */
 
+import {
+  VaultAuthError as AppClientVaultAuthError,
+  VaultConflictError as AppClientVaultConflictError,
+  VaultNotFoundError as AppClientVaultNotFoundError,
+  VaultTargetExistsError as AppClientVaultTargetExistsError,
+  VaultUnreachableError as AppClientVaultUnreachableError,
+  VaultUploadError as AppClientVaultUploadError,
+} from "@openparachute/app-client";
+import type {
+  CreateNotePayload,
+  Note,
+  NoteAttachment,
+  ReachabilitySignal,
+  StorageUploadResult,
+  TagSummary,
+  UpdateNotePayload,
+  UploadProgress,
+  VaultInfo,
+} from "./types";
+
+// Error classes + payload types are re-exports from app-client — Phase 2
+// of the migration arc lifted the implementations there. Notes imports
+// these from `@/lib/vault/client` in many places; the re-exports keep
+// every consumer working without per-file edits.
+export const VaultAuthError = AppClientVaultAuthError;
+export type VaultAuthError = InstanceType<typeof AppClientVaultAuthError>;
+export const VaultNotFoundError = AppClientVaultNotFoundError;
+export type VaultNotFoundError = InstanceType<typeof AppClientVaultNotFoundError>;
+export const VaultUnreachableError = AppClientVaultUnreachableError;
+export type VaultUnreachableError = InstanceType<typeof AppClientVaultUnreachableError>;
+export const VaultConflictError = AppClientVaultConflictError;
+export type VaultConflictError = InstanceType<typeof AppClientVaultConflictError>;
+export const VaultTargetExistsError = AppClientVaultTargetExistsError;
+export type VaultTargetExistsError = InstanceType<typeof AppClientVaultTargetExistsError>;
+export const VaultUploadError = AppClientVaultUploadError;
+export type VaultUploadError = InstanceType<typeof AppClientVaultUploadError>;
+
+export type { CreateNotePayload, UpdateNotePayload, UploadProgress, StorageUploadResult };
+
+// File-upload guardrails. Kept Notes-side because they're UX-level (the
+// add-attachment flow surfaces them in error messages); app-client's
+// VaultClient leaves enforcement to the vault.
 export const STORAGE_MAX_BYTES = 100 * 1024 * 1024;
 export const STORAGE_ALLOWED_EXTENSIONS = new Set([
   "wav",
@@ -40,104 +115,6 @@ export interface VaultClientOptions {
   // Side-effect free here; all hysteresis, backoff, and UI promotion lives in
   // the store.
   onReachability?: (signal: ReachabilitySignal, reason?: string) => void;
-}
-
-export type ReachabilitySignal = "healthy" | "unreachable";
-
-export interface StorageUploadResult {
-  path: string;
-  size: number;
-  mimeType: string;
-}
-
-export interface UploadProgress {
-  loaded: number;
-  total: number;
-}
-
-export class VaultUploadError extends Error {
-  readonly status: number;
-  constructor(message: string, status: number) {
-    super(message);
-    this.name = "VaultUploadError";
-    this.status = status;
-  }
-}
-
-export class VaultAuthError extends Error {
-  constructor(message = "Vault rejected the token") {
-    super(message);
-    this.name = "VaultAuthError";
-  }
-}
-
-export class VaultNotFoundError extends Error {
-  constructor(message = "Not found") {
-    super(message);
-    this.name = "VaultNotFoundError";
-  }
-}
-
-// Thrown when the vault is unreachable — 5xx from the server (502/503/504,
-// usually the hub proxy reporting the vault is down or mid-restart) or a
-// network-level failure (ECONNREFUSED, DNS failure, fetch TypeError). The
-// reachability store reads this to flip a per-vault state machine and pause
-// React Query retries while down (see QueryProvider). `status` is 0 for
-// network-level errors that never produced a response.
-export class VaultUnreachableError extends Error {
-  readonly status: number;
-  constructor(message: string, status: number) {
-    super(message);
-    this.name = "VaultUnreachableError";
-    this.status = status;
-  }
-}
-
-export class VaultConflictError extends Error {
-  readonly currentUpdatedAt: string | null;
-  readonly expectedUpdatedAt: string | null;
-  constructor(body: {
-    current_updated_at?: string | null;
-    expected_updated_at?: string | null;
-    message?: string;
-  }) {
-    super(body.message ?? "Note was edited elsewhere");
-    this.name = "VaultConflictError";
-    this.currentUpdatedAt = body.current_updated_at ?? null;
-    this.expectedUpdatedAt = body.expected_updated_at ?? null;
-  }
-}
-
-// Thrown by `renameTag` when the vault refuses because a tag with the target
-// name already exists. Callers (e.g. the rename dialog) surface this as an
-// affordance to merge into the existing tag instead.
-export class VaultTargetExistsError extends Error {
-  readonly target: string;
-  constructor(target: string, message?: string) {
-    super(message ?? `A tag named "${target}" already exists`);
-    this.name = "VaultTargetExistsError";
-    this.target = target;
-  }
-}
-
-export interface UpdateNotePayload {
-  content?: string;
-  path?: string;
-  metadata?: Record<string, unknown>;
-  tags?: { add?: string[]; remove?: string[] };
-  if_updated_at?: string;
-  // The vault's PATCH /api/notes/:idOrPath enforces optimistic concurrency by
-  // default: either `if_updated_at` or `force: true` is required. `force` is
-  // the opt-out for writes where we genuinely don't have a baseline (e.g.
-  // offline-queued settings writes that drain long after we last fetched).
-  force?: boolean;
-}
-
-export interface CreateNotePayload {
-  content: string;
-  path?: string;
-  tags?: string[];
-  metadata?: Record<string, unknown>;
 }
 
 export class VaultClient {
@@ -227,7 +204,7 @@ export class VaultClient {
         // token also failed. Either way, the credentials we have are dead.
         this.onAuthRevoked?.(res.status);
       }
-      throw new VaultAuthError(`Vault rejected the token (${res.status})`);
+      throw new VaultAuthError(`Vault rejected the token (${res.status})`, res.status);
     }
     if (res.status === 404) {
       throw new VaultNotFoundError(`${init.method ?? "GET"} ${path} → 404`);
@@ -394,7 +371,7 @@ export class VaultClient {
 
       xhr.onload = () => {
         if (xhr.status === 401 || xhr.status === 403) {
-          reject(new VaultAuthError(`Vault rejected the token (${xhr.status})`));
+          reject(new VaultAuthError(`Vault rejected the token (${xhr.status})`, xhr.status));
           return;
         }
         if (xhr.status < 200 || xhr.status >= 300) {
@@ -497,7 +474,7 @@ export class VaultClient {
         // requestWithRetry so attachment loads also surface the banner.
         this.onAuthRevoked?.(res.status);
       }
-      throw new VaultAuthError(`Vault rejected the token (${res.status})`);
+      throw new VaultAuthError(`Vault rejected the token (${res.status})`, res.status);
     }
     if (!res.ok) {
       throw new Error(`GET ${originalUrl} failed (${res.status})`);

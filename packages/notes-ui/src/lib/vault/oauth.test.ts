@@ -5,11 +5,19 @@ import {
   completeOAuth,
   redirectUriForOrigin,
   refreshAccessToken,
-  storedFromTokenResponse,
 } from "./oauth";
 import { deriveCodeChallenge } from "./pkce";
 import { clearCachedClientId, loadPendingOAuth, savePendingOAuth } from "./storage";
 import type { PendingOAuthState } from "./types";
+
+// `storedFromTokenResponse` is now a re-export from
+// `@openparachute/app-client` (Phase 2, parachute-app#6) — its unit
+// tests live in app-client's own suite. `refreshAccessToken` stays
+// Notes-side because it's wired into refresh.ts without the
+// ParachuteOAuth driver class. The `beginOAuth` + `completeOAuth` tests
+// below still cover Notes-specific orchestration: priorHaltedVaultId,
+// caller-supplied params, the cached client_id reuse pattern, and the
+// PendingApprovalError fallback shape.
 
 const validMetadata = {
   issuer: "http://localhost:1940",
@@ -420,36 +428,6 @@ describe("completeOAuth", () => {
     const { token } = await completeOAuth("auth-code", "state-xyz", fetchImpl);
     expect(token.services?.vault?.url).toBe("https://parachute.x.ts.net/vault/default");
     expect(token.services?.scribe?.url).toBe("https://parachute.x.ts.net/scribe");
-  });
-});
-
-describe("storedFromTokenResponse", () => {
-  it("computes an absolute expiresAt from expires_in", () => {
-    const stored = storedFromTokenResponse(
-      {
-        access_token: "eyJ.a",
-        token_type: "bearer",
-        scope: "vault:read",
-        vault: "default",
-        refresh_token: "rt_a",
-        expires_in: 900,
-      },
-      1_700_000_000_000,
-    );
-    expect(stored.accessToken).toBe("eyJ.a");
-    expect(stored.refreshToken).toBe("rt_a");
-    expect(stored.expiresAt).toBe(1_700_000_900_000);
-  });
-
-  it("omits refreshToken / expiresAt for legacy pvt_* tokens", () => {
-    const stored = storedFromTokenResponse({
-      access_token: "pvt_abc",
-      token_type: "bearer",
-      scope: "vault:read",
-      vault: "default",
-    });
-    expect(stored.refreshToken).toBeUndefined();
-    expect(stored.expiresAt).toBeUndefined();
   });
 });
 

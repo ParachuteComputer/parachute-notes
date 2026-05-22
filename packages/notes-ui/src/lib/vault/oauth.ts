@@ -1,5 +1,37 @@
+/**
+ * Notes' OAuth flow — orchestrates `@openparachute/app-client`'s PKCE +
+ * discovery + DCR primitives around Notes-specific concerns:
+ *
+ *   - `priorHaltedVaultId` round-trip via sessionStorage (notes#148) so
+ *     OAuthCallback can clear the originally-halted vault's halt entry
+ *     on success even when the new vault URL resolves to a different
+ *     `vaultIdFromUrl`.
+ *   - Issuer-keyed DCR cache (one client_id per issuer per browser),
+ *     distinct from app-client's per-app in-memory cache because Notes
+ *     was registered before app-client existed and we want to reuse
+ *     historical localStorage entries rather than re-DCR on first load.
+ *   - `redirectUriForOrigin` derived from `import.meta.env.BASE_URL` so
+ *     a hub-mounted Notes (`/notes/`) and a parachute-app-mounted Notes
+ *     (`/app/notes/`) both land back on a URL the SPA actually serves.
+ *   - Caller-supplied `params` (e.g. `vault=<name>` hint from the vault
+ *     popover) appended without overwriting standard OAuth/PKCE params.
+ *
+ * Phase 2 of the notes-migration-to-app arc (parachute-app#6, design doc
+ * section 16). The error classes and `storedFromTokenResponse` are
+ * re-exports from app-client now — they were lifted byte-for-byte.
+ */
+
+import {
+  PendingApprovalError,
+  RefreshHttpError,
+  type StoredToken,
+  type TokenResponse,
+  deriveCodeChallenge,
+  generateCodeVerifier,
+  generateState,
+  storedFromTokenResponse,
+} from "@openparachute/app-client";
 import { discoverAuthServer, registerClient } from "./discovery";
-import { deriveCodeChallenge, generateCodeVerifier, generateState } from "./pkce";
 import {
   clearCachedClientId,
   clearPendingOAuth,
@@ -8,8 +40,13 @@ import {
   saveCachedClientId,
   savePendingOAuth,
 } from "./storage";
-import type { PendingOAuthState, StoredToken, TokenResponse, TokenScope } from "./types";
+import type { PendingOAuthState, TokenScope } from "./types";
 import { normalizeVaultUrl } from "./url";
+
+// Re-exports — app-client owns the implementations; preserved here so
+// existing import sites (`import { PendingApprovalError, ... } from
+// "@/lib/vault/oauth"`) don't churn.
+export { PendingApprovalError, RefreshHttpError, clearCachedClientId, storedFromTokenResponse };
 
 const REDIRECT_PATH = "/oauth/callback";
 // Default scope vocabulary. `vault:read vault:write` per
@@ -19,9 +56,10 @@ const REDIRECT_PATH = "/oauth/callback";
 export const DEFAULT_SCOPE: TokenScope = "vault:read vault:write";
 
 // Notes is mounted under `import.meta.env.BASE_URL` (defaults to `/`, can be
-// `/notes/` when the hub portal path-routes us). The OAuth callback must
-// include that prefix so the authorization server bounces the browser back to
-// a URL the SPA actually serves.
+// `/notes/` when the hub portal path-routes us, or `/app/notes/` once
+// parachute-app installs it). The OAuth callback must include that prefix so
+// the authorization server bounces the browser back to a URL the SPA actually
+// serves.
 function basePathPrefix(): string {
   const b = import.meta.env.BASE_URL ?? "/";
   return b.replace(/\/$/, "");
@@ -164,34 +202,6 @@ function parsePendingApproval(text: string): { approveUrl: string } | null {
 }
 
 /**
- * Thrown by `completeOAuth` when the token endpoint answers with
- * `error: "invalid_client"` for a client that's registered but pending
- * operator approval (hub#74 / hub#240). Carries the actionability hint
- * the hub now includes alongside the OAuth error so the UI can render a
- * one-click "approve in hub" path:
- *
- *   - `approveUrl` — hub-served SPA route (`/admin/approve-client/<id>`)
- *     the operator can open to approve the client inline. Same-origin
- *     to the hub. `parsePendingApproval` returns `null` (and
- *     `completeOAuth` falls through to the generic token-exchange
- *     error) when the hub omits it, so by the time this error is
- *     thrown, `approveUrl` is guaranteed to be a valid http(s) string.
- *
- * Hub still emits a `cli_alternative` shell command in the same response
- * for terminal-comfortable operators, but Notes no longer surfaces it —
- * the wizard-era goal is "everything from a browser."
- */
-export class PendingApprovalError extends Error {
-  readonly approveUrl: string;
-
-  constructor(approveUrl: string) {
-    super("Your hub needs to approve this app before sign-in can complete.");
-    this.name = "PendingApprovalError";
-    this.approveUrl = approveUrl;
-  }
-}
-
-/**
  * Complete the OAuth flow: verify state, POST the auth code + PKCE verifier to
  * the token endpoint, clear pending state.
  */
@@ -246,57 +256,10 @@ export async function completeOAuth(
   return { pending, token };
 }
 
-/**
- * Convert a token-endpoint response into the on-disk shape, computing
- * `expiresAt` from `expires_in` so the 401-driven refresh path can compare a
- * single absolute timestamp.
- */
-export function storedFromTokenResponse(
-  token: TokenResponse,
-  now: number = Date.now(),
-): StoredToken {
-  const stored: StoredToken = {
-    accessToken: token.access_token,
-    scope: token.scope,
-    vault: token.vault,
-  };
-  if (token.refresh_token) stored.refreshToken = token.refresh_token;
-  if (typeof token.expires_in === "number") {
-    stored.expiresAt = now + token.expires_in * 1000;
-  }
-  return stored;
-}
-
 export interface RefreshContext {
   tokenEndpoint: string;
   clientId: string;
   refreshToken: string;
-}
-
-// Thrown by `refreshAccessToken` when the hub answered with a non-2xx —
-// distinct from a network error so callers can tell "server rejected our
-// refresh token" (revoked / rotated past us; surface a reconnect prompt) apart
-// from "couldn't reach the hub at all" (transient; let the next sync tick
-// retry quietly).
-export class RefreshHttpError extends Error {
-  readonly status: number;
-  readonly body: string;
-  readonly oauthError?: string;
-
-  constructor(status: number, body: string) {
-    let oauthError: string | undefined;
-    try {
-      const parsed = JSON.parse(body) as { error?: unknown };
-      if (typeof parsed.error === "string") oauthError = parsed.error;
-    } catch {
-      // Body wasn't JSON — fine; some hubs return text on infra errors.
-    }
-    super(`Token refresh failed (${status}): ${body}`);
-    this.name = "RefreshHttpError";
-    this.status = status;
-    this.body = body;
-    this.oauthError = oauthError;
-  }
 }
 
 /**
@@ -305,6 +268,12 @@ export class RefreshHttpError extends Error {
  * Hub#66 implements RFC 6749 §6 with refresh-token rotation: each successful
  * call returns a new `refresh_token` that supersedes the one passed in. The
  * caller must persist the rotated value or the next refresh will 400.
+ *
+ * Kept Notes-side rather than calling app-client's `ParachuteOAuth.
+ * refreshAccessToken` because Notes' refresh path doesn't go through a
+ * driver instance — `refresh.ts` reads the rotated metadata off
+ * `VaultRecord` directly so the rotate can run from any 401 caller
+ * without holding a reference to the OAuth class.
  */
 export async function refreshAccessToken(
   ctx: RefreshContext,
@@ -337,7 +306,9 @@ export async function refreshAccessToken(
   return token;
 }
 
-// Re-exported so call sites that need to invalidate a cached client_id (e.g.
-// hub returns 4xx client_not_found on /oauth/authorize) don't have to import
-// from storage directly.
-export { clearCachedClientId };
+// Re-export StoredToken-conversion shape for callers that import it from
+// here (refresh.ts, OAuthCallback). Notes' storedFromTokenResponse used to
+// always set `vault` even when the token response omitted it; app-client's
+// version mirrors that intent (sets `vault` only when present in the
+// response, which matches RFC 6749 §4.1.4 and hub's actual behavior).
+export type { StoredToken };
