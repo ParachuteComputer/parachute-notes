@@ -1,3 +1,7 @@
+> ⚠️ **DEPRECATED** — this daemon is deprecated as of 2026-05-22.
+> Notes ships as a UI bundle (`@openparachute/notes-ui`) hosted by [parachute-app](https://github.com/ParachuteComputer/parachute-app).
+> See [DEPRECATED.md](./DEPRECATED.md) for the migration path.
+
 # Parachute Notes (`@openparachute/notes`)
 
 The default frontend for [Parachute](https://parachute.computer). Browse, edit, and capture in any [Parachute Vault](https://github.com/ParachuteComputer/parachute-vault).
