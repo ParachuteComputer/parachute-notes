@@ -25,6 +25,38 @@ The daemon's build copies notes-ui's `dist/` into its own, so publish `notes-ui`
 
 **Don't run `npm publish` from the repo root without `--workspace`** — npm would try to publish `@openparachute/notes-monorepo` (the workspace root). That's blocked by `private: true` as a safety net.
 
+## Workspace dependencies must be concrete in the published manifest
+
+If a publishable package (notes-ui, notes-daemon) depends on a sibling workspace package or any sibling-published package (e.g. `@openparachute/app-client` from the parachute-app repo), the dependency in its `package.json` MUST be a concrete semver (e.g. `"^0.1.0-rc.3"`) — NEVER `workspace:*` or `link:...`.
+
+**Reason**: `npm publish` does NOT rewrite the `workspace:` protocol at publish time. (Bun's `bun publish` does, but we can't bind the publish workflow to a single tool.) `link:` is a local-dev-only protocol that always serializes as an unresolvable string in a published tarball. Either form leaks into the npm-served manifest and breaks every install:
+
+```
+error: Workspace dependency "@openparachute/app-client" not found
+```
+
+This bit us on `@openparachute/notes-ui@0.1.0-rc.3` (and `@openparachute/app@0.2.0-rc.3` next door) — both required emergency rc.4 republishes 2026-05-22.
+
+**To bump a sibling dep** (e.g. when app-client publishes a new rc):
+
+1. Update the consumer's `package.json` to the new concrete version (e.g. `"^0.1.0-rc.4"`).
+2. `bun install` to refresh the lockfile.
+3. Run typecheck + tests locally.
+4. Bump the consumer's own version + CHANGELOG entry referencing the dep bump.
+5. Publish the consumer.
+
+**Local dev still works** with concrete semver — Bun's resolver matches sibling packages by name regardless of the version string, falling back to the registry only when no sibling matches.
+
+**Verify before publishing**:
+
+```bash
+cd packages/notes-ui && npm pack --dry-run
+# scan the printed manifest's `dependencies` block — every entry must be a
+# concrete semver. NO `workspace:` and NO `link:` strings.
+```
+
+If the dry-run shows `workspace:` or `link:`, fix the package.json before publishing.
+
 ## RC vs stable
 
 Pre-1.0, every code-touching publish bumps `rc.N`:
