@@ -5,6 +5,17 @@ This is the monorepo-level changelog. Per-package changelogs live at:
 - `packages/notes-daemon/CHANGELOG.md` — `@openparachute/notes`
 - `packages/notes-ui/CHANGELOG.md` — `@openparachute/notes-ui`
 
+## 2026-05-22 — notes-ui 0.1.0-rc.4 fix-publish
+
+`@openparachute/notes-ui@0.1.0-rc.3`'s tarball declared
+`"@openparachute/app-client": "link:@openparachute/app-client"` —
+the local-dev `link:` protocol set up during the notes#153 work
+when app-client wasn't yet published. Installing rc.3 from npm
+failed at resolve. rc.4 switches to a concrete `^0.1.0-rc.3` and
+the repo's `RELEASING.md` grows a "Workspace dependencies" rule
+to prevent recurrence. See
+`packages/notes-ui/CHANGELOG.md` for the full entry.
+
 ## 2026-05-22 — notes-daemon deprecated (Phase 2)
 
 `@openparachute/notes` (the daemon at `packages/notes-daemon/`) entered the

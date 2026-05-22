@@ -1,5 +1,27 @@
 # Changelog — @openparachute/notes-ui
 
+## [0.1.0-rc.4] - 2026-05-22
+
+- **Fix: resolve `link:` dep in published manifest** (`link:` →
+  `^0.1.0-rc.3`). The published tarball for `0.1.0-rc.3` carried
+  `"@openparachute/app-client": "link:@openparachute/app-client"` —
+  a local-dev-only protocol set up in notes#153 when app-client
+  wasn't yet on npm. Installing `@openparachute/notes-ui@0.1.0-rc.3`
+  failed at resolve:
+
+  ```
+  error: Workspace dependency "@openparachute/app-client" not found
+  ```
+
+  `@openparachute/app-client@0.1.0-rc.3` is now published, so we
+  switch to a concrete semver. Local dev still resolves the sibling
+  through Bun's workspace resolver (it matches by name regardless
+  of the version string), and the published tarball declares a
+  real, registry-resolvable dependency.
+
+  The repo's `RELEASING.md` grows a "Workspace dependencies" section
+  documenting the rule so this can't recur.
+
 ## [0.1.0-rc.3] - 2026-05-22
 
 - **Refactor: `VaultClient` subclasses `@openparachute/app-client`'s
