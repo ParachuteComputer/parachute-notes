@@ -14,7 +14,7 @@
     },
     "packages/notes-ui": {
       "name": "@openparachute/notes-ui",
-      "version": "0.1.0-rc.1",
+      "version": "0.1.0-rc.2",
       "dependencies": {
         "@codemirror/commands": "^6.10.3",
         "@codemirror/lang-markdown": "^6.5.0",
@@ -22,6 +22,7 @@
         "@codemirror/state": "^6.6.0",
         "@codemirror/view": "^6.41.1",
         "@lezer/highlight": "^1.2.3",
+        "@openparachute/app-client": "link:@openparachute/app-client",
         "@tanstack/react-query": "^5",
         "highlight.js": "^11.11.1",
         "idb": "^8.0.3",
@@ -424,6 +425,8 @@
     "@lezer/markdown": ["@lezer/markdown@1.6.3", "", { "dependencies": { "@lezer/common": "^1.5.0", "@lezer/highlight": "^1.0.0" } }, "sha512-jpGm5Ps+XErS+xA4urw7ogEGkeZOahVQF21Z6oECF0sj+2liwZopd2+I8uH5I/vZsRuuze3OxBREIANLf6KKUw=="],
 
     "@marijn/find-cluster-break": ["@marijn/find-cluster-break@1.0.2", "", {}, "sha512-l0h88YhZFyKdXIFNfSWpyjStDjGHwZ/U7iobcK1cQQD8sejsONdQtTVU+1wVN1PBw40PiiHB1vA5S7VTfQiP9g=="],
+
+    "@openparachute/app-client": ["@openparachute/app-client@link:@openparachute/app-client", {}],
 
     "@openparachute/notes": ["@openparachute/notes@workspace:packages/notes-daemon"],
 

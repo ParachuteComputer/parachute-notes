@@ -1,5 +1,31 @@
 # Changelog — @openparachute/notes-ui
 
+## [0.1.0-rc.2] - 2026-05-22
+
+- **Adopt `@openparachute/app-client`** (Phase 2 of the notes-migration-
+  to-app arc — [parachute-app#6][app6], design doc [Section 16][s16]).
+  The in-repo OAuth driver, VaultClient error classes, PKCE primitives,
+  discovery + DCR helpers, URL/vault-id helpers, and service-worker
+  reload code are now re-exports from `@openparachute/app-client`. Net
+  ~750 lines deleted across `packages/notes-ui/src/lib/vault/` and
+  `packages/notes-ui/src/lib/pwa.ts`; behaviour unchanged.
+
+  Notes-specific orchestration stays here: `priorHaltedVaultId` round-
+  trip (notes#148), `redirectUriForOrigin` (mount-path aware),
+  issuer-keyed DCR cache, tag-curation endpoints (`renameTag`,
+  `mergeTags`, `deleteTag`, `updateTag`, `listTagsWithSchema`), and
+  the multi-vault store + refresh-on-401 pipeline. The VaultClient
+  request loop currently still lives here because app-client's
+  `request` is `private`; a follow-up will lift it to `protected` so
+  Notes can subclass and shrink further.
+
+  Local-dev wiring: notes-ui depends on `@openparachute/app-client` via
+  `bun link` until app-client is published to npm. Operators running
+  notes-ui from a local checkout should `bun link @openparachute/app-
+  client` from the parachute-app workspace first.
+
+[app6]: https://github.com/ParachuteComputer/parachute-app/issues/6
+
 ## [0.1.0-rc.1] - 2026-05-21
 
 - **Initial release.** Parachute Notes UI bundle, split out of the
