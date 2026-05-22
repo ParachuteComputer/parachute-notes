@@ -1,5 +1,51 @@
 # Changelog
 
+## [0.3.17-rc.1] - 2026-05-21
+
+- **feat(notes): Phase 1 migration — monorepo restructure, dual-publish
+  `@openparachute/notes-ui` alongside this package.** The parachute-notes
+  repo is now a bun workspace with two publish targets:
+
+  - `@openparachute/notes-ui` (new at `0.1.0-rc.1`) — UI bundle only,
+    no daemon, no `.parachute/module.json`. Installed under
+    [parachute-app][app] as the canonical first app per the [notes
+    migration arc Section 16][s16].
+  - `@openparachute/notes` (this package, bumped to `0.3.17-rc.1`) —
+    unchanged daemon shape. Hub continues to install via
+    `parachute install notes`; `dist/` continues to land at the same
+    resolved path; `.parachute/module.json` continues to declare port
+    1942 + the `/notes` mount.
+
+  Restructure mechanics:
+
+  - All source moves from repo-root `src/`, `scripts/`, `public/`,
+    `index.html`, `vite.config.ts`, etc. into `packages/notes-ui/`.
+    No source code changes — only path changes.
+  - `.parachute/module.json` and the (now lean) CHANGELOG + README
+    move into `packages/notes-daemon/`. This package's publish payload
+    (`files: ["dist", ".parachute/module.json", "README.md", ...]`)
+    is unchanged in shape.
+  - `packages/notes-daemon` declares `@openparachute/notes-ui` as a
+    workspace devDependency. The build step (`scripts/build.mjs`)
+    copies notes-ui's `dist/` into this package's `dist/`. Both
+    packages ship byte-identical bundles.
+  - Root `package.json` becomes a workspace root (`workspaces:
+    ["packages/*"]`); `bun run build` runs notes-ui's build then
+    this package's copy step.
+
+  Two new direct deps surface on notes-ui that were previously
+  unhoisted transitives: `@lezer/highlight` (used in
+  `CodeMirrorEditor.tsx`) and `@types/mdast` (used in remark-wikilinks
+  types). The flat-layout was hiding the latent missing-declaration;
+  bun's workspace isolated layout surfaced it. Declaring them
+  directly is the correct fix regardless of layout.
+
+  Phase 2 (deprecate the daemon form) and Phase 3 (retire the daemon
+  + reclaim port 1942) happen in later PRs. This PR is additive.
+
+[s16]: https://github.com/ParachuteComputer/parachute.computer/blob/main/design/2026-05-21-parachute-apps-design.md#16-notes-migration-to-app
+[app]: https://github.com/ParachuteComputer/parachute-app
+
 ## [0.3.16-rc.6] - 2026-05-21
 
 - **fix(notes): SW update reload + OAuth reconnect 401 clearing (#148).**
