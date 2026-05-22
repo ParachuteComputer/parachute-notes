@@ -10,7 +10,6 @@
     "url": "https://github.com/ParachuteComputer/parachute-notes.git",
     "directory": "packages/notes-ui"
   },
-  "main": "dist/index.html",
   "files": ["dist", "README.md", "LICENSE", "CHANGELOG.md"],
   "scripts": {
     "dev": "vite",

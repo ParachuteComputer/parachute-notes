@@ -6,10 +6,13 @@
 // is the module-shaped wrapper that hub installs via `parachute install notes`.
 // Build = copy notes-ui's dist/ into our dist/, no transformation.
 //
-// We treat notes-ui's dist as a build-time artifact: the workspace dependency
-// is resolved through node_modules. The pre-resolved path is what Vite + bun
-// link to the actual UI source. If the UI hasn't been built yet, fail loudly
-// so the operator can run `bun run build` from the workspace root.
+// We resolve notes-ui's dist/ via a relative workspace path (../notes-ui/dist).
+// This is a monorepo-local convention — there's no @openparachute/notes-ui
+// symlink in node_modules; the path walks straight to the sibling package.
+// When the daemon is published independently (or notes-ui retires per Phase 3),
+// dist/ is copied at build time and the relative resolution drops away.
+// If the UI hasn't been built yet, fail loudly so the operator can run
+// `bun run build` from the workspace root.
 
 import { cpSync, existsSync, mkdirSync, rmSync } from "node:fs";
 import { dirname, resolve } from "node:path";
