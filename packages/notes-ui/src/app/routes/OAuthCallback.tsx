@@ -4,7 +4,6 @@ import {
   saveServicesCatalog,
   storedFromTokenResponse,
   useVaultStore,
-  vaultIdFromUrl,
 } from "@/lib/vault";
 import { useAuthHaltStore } from "@/lib/vault/auth-halt-store";
 import { useEffect, useRef, useState } from "react";
@@ -101,9 +100,6 @@ export function OAuthCallback() {
       }
     })();
   }, [params, navigate, addVault]);
-
-  // Prevent Biome warning; vaultIdFromUrl is used elsewhere but re-exported via store.
-  void vaultIdFromUrl;
 
   if (status.kind === "working") {
     return (

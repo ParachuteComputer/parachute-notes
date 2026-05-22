@@ -19,8 +19,10 @@
  *   - `listTagsWithSchema` — `/api/tags?include_schema=true`, used by
  *     the schema-audit runner (notes#129) to diff vault state against
  *     `NOTES_REQUIRED_SCHEMA`.
- *   - `linkAttachment` — alias for app-client's `addAttachment`; kept
- *     so call sites that import the historical name don't churn.
+ *   - `linkAttachment` — Notes-only method that POSTs to the vault's
+ *     attachments endpoint. Not part of app-client's surface (Notes-specific
+ *     to its capture flow); once VaultClient.request lifts to `protected`
+ *     in app-client, this can subclass cleanly.
  *   - `fetchAttachmentBlob` — retry-aware GET of an attachment blob URL
  *     (for audio/image render), with the same `onAuthError`/`onReachability`
  *     plumbing as the JSON path.
