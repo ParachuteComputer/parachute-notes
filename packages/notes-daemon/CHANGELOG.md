@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.3.17-rc.2] - 2026-05-22 — DEPRECATION RELEASE
+
+This is the deprecation release. notes-daemon is no longer the recommended way to ship Notes.
+
+- **DEPRECATED**: see [DEPRECATED.md](./DEPRECATED.md) for migration to parachute-app + @openparachute/notes-ui
+- **No functional changes**: this release ships the same dist/ as 0.3.17-rc.1, just with the deprecation banner + DEPRECATED.md
+- **Hub redirect**: hub#316 adds `/notes/*` → `/app/notes/*` redirect for transparent migration
+
+Migrate at your own pace. notes-daemon will continue to serve until Phase 3 retirement (~Q3 2026).
+
 ## [0.3.17-rc.1] - 2026-05-21
 
 - **feat(notes): Phase 1 migration — monorepo restructure, dual-publish
