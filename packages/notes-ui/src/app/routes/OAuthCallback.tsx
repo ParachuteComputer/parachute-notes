@@ -59,10 +59,14 @@ export function OAuthCallback() {
           (perVaultKey ? token.services?.[perVaultKey]?.url : undefined) ??
           token.services?.vault?.url ??
           pending.issuerUrl;
+        // app-client's TokenResponse marks `vault` optional (hub responses
+        // sometimes omit it on standalone-vault flows that pre-date hub-as-
+        // issuer); fall back to the issuer-derived display name so VaultRecord
+        // always carries something to render.
         const id = addVault(
           {
             url: vaultUrl,
-            name: token.vault,
+            name: token.vault ?? pending.issuer,
             issuer: pending.issuer,
             tokenEndpoint: pending.tokenEndpoint,
             clientId: pending.clientId,
