@@ -1,5 +1,39 @@
 # Changelog — @openparachute/notes-ui
 
+## [0.1.0] - 2026-05-23
+
+- **First stable release; promoted from rc.5.** Tagged `@latest` for
+  parachute-app bootstrap's bare-spec resolution.
+- **Fix: ship `meta.json` so parachute-app bootstrap can install.**
+  parachute-app's auto-bootstrap path validates `@openparachute/notes-
+  ui`'s tarball against its [meta-schema][meta-schema] and requires
+  `name` + `displayName` + `path`. Tarballs through rc.4 included only
+  `dist/`, `LICENSE`, `README.md`, `package.json`, and `CHANGELOG.md`
+  — no `meta.json`, so bootstrap failed with:
+
+  ```
+  [app] bootstrap: failed to install @openparachute/notes-ui: meta.json:
+  name: is required (string); displayName: is required (non-empty
+  string); path: is required (string)
+  ```
+
+  This release adds `packages/notes-ui/meta.json` and includes it in
+  the `files` list. The file declares `name: "notes"`, `displayName:
+  "Notes"`, `path: "/app/notes"`, `scopes_required: ["vault:*:read",
+  "vault:*:write"]` (vault-agnostic — Notes' in-app vault picker
+  narrows per OAuth flow), `pwa: true` + `pwa_service_worker: "sw.js"`
+  (Notes is the canonical PWA-mode example per [design §18][s18]),
+  `iconUrl: "icon.svg"`, and the `required_schema.tags` declaration
+  for `capture` / `capture/text` / `capture/voice` mirroring
+  `NOTES_REQUIRED_SCHEMA` in `src/lib/vault/schema.ts` (patterns#57 —
+  Phase 2.0 validates the shape; Phase 2.1+ auto-provisions).
+
+  Canonical reference for the shape: [design doc §5][s5].
+
+[meta-schema]: https://github.com/ParachuteComputer/parachute-app/blob/main/packages/app-host/src/meta-schema.ts
+[s5]: https://github.com/ParachuteComputer/parachute.computer/blob/main/design/2026-05-21-parachute-apps-design.md#5-per-ui-metadata-schema--metajson-draft-07
+[s18]: https://github.com/ParachuteComputer/parachute.computer/blob/main/design/2026-05-21-parachute-apps-design.md#18-caching--reload-strategy
+
 ## [0.1.0-rc.4] - 2026-05-22
 
 - **Fix: resolve `link:` dep in published manifest** (`link:` →

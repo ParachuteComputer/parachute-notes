@@ -2,8 +2,10 @@
 
 The `parachute-notes` repo is a monorepo with two publishable packages:
 
-- `@openparachute/notes-ui` — the UI bundle (in `packages/notes-ui/`), installed under parachute-app as the canonical first app
+- `@openparachute/notes-ui` — the UI bundle (in `packages/notes-ui/`), installed under parachute-app as the canonical first app. Ships `meta.json` alongside `dist/` so parachute-app's bootstrap validator accepts the tarball (added rc.5; see [meta-schema][meta-schema]).
 - `@openparachute/notes` — the legacy module daemon (in `packages/notes-daemon/`), **deprecated as of rc.2** in favor of installing notes-ui via parachute-app
+
+[meta-schema]: https://github.com/ParachuteComputer/parachute-app/blob/main/packages/app-host/src/meta-schema.ts
 
 The workspace root (`@openparachute/notes-monorepo`) is intentionally `private: true` and should NEVER publish.
 
@@ -53,9 +55,12 @@ This bit us on `@openparachute/notes-ui@0.1.0-rc.3` (and `@openparachute/app@0.2
 cd packages/notes-ui && npm pack --dry-run
 # scan the printed manifest's `dependencies` block — every entry must be a
 # concrete semver. NO `workspace:` and NO `link:` strings.
+#
+# Also confirm `meta.json` appears in the file list — parachute-app's
+# bootstrap validator rejects tarballs without it.
 ```
 
-If the dry-run shows `workspace:` or `link:`, fix the package.json before publishing.
+If the dry-run shows `workspace:` or `link:`, fix the package.json before publishing. If `meta.json` is missing, ensure it's listed in the `files` array of `packages/notes-ui/package.json`.
 
 ## RC vs stable
 
