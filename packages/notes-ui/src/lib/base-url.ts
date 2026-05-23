@@ -54,7 +54,7 @@
  *
  *   1. **Canonical** — read `<meta name="parachute-mount" content="/app/<name>">`
  *      injected by parachute-app's static-serve. This is the load-bearing path
- *      once parachute-app#NN ships. Apps read what the host explicitly told them;
+ *      once parachute-app#21 ships. Apps read what the host explicitly told them;
  *      no guessing.
  *
  *   2. **Interim fallback** — regex-detect against known parachute mount
@@ -66,7 +66,7 @@
  * and as a prefix for OAuth callback URLs.
  *
  * Future: this logic will move into `@openparachute/app-client`'s
- * `getMountBase()` helper (issue NN). Apps consume that abstraction; this file
+ * `getMountBase()` helper (issue parachute-app#22). Apps consume that abstraction; this file
  * exists until that lands.
  */
 
@@ -95,7 +95,7 @@ const LEGACY_FALLBACK = "/notes" as const;
  * Two-tier resolution:
  *
  *   1. Check for `<meta name="parachute-mount" content="/app/<name>">`
- *      injected by the host (canonical contract once parachute-app#NN ships).
+ *      injected by the host (canonical contract once parachute-app#21 ships).
  *   2. Fall back to regex-matching `window.location.pathname` against the
  *      known mount patterns.
  *
@@ -109,7 +109,7 @@ const LEGACY_FALLBACK = "/notes" as const;
  */
 export function detectMountBase(pathname?: string, doc?: Document): string {
   // 1. Canonical contract: read the meta tag parachute-app injects on serve.
-  //    Once parachute-app#NN ships, this is the load-bearing path.
+  //    Once parachute-app#21 ships, this is the load-bearing path.
   if (typeof document !== "undefined" || doc !== undefined) {
     const d = doc ?? document;
     const meta = d.querySelector<HTMLMetaElement>('meta[name="parachute-mount"]');
@@ -120,7 +120,7 @@ export function detectMountBase(pathname?: string, doc?: Document): string {
   }
 
   // 2. Fallback: regex-detect from window.location.pathname.
-  //    Interim until parachute-app#NN lands.
+  //    Interim until parachute-app#21 lands.
   const path = pathname ?? (typeof window === "undefined" ? null : window.location.pathname);
   if (path == null) return LEGACY_FALLBACK;
   for (const pattern of MOUNT_PATTERNS) {

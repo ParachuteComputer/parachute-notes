@@ -40,7 +40,7 @@
 - **Amendment: meta-tag fast-path before regex fallback.** Adds meta-tag
   fast-path to mount detection. Apps read `<meta name="parachute-mount">`
   first; regex fallback handles the interim until parachute-app injects
-  the meta tag (tracked at NN). Forward-compatible: when the canonical
+  the meta tag (tracked at parachute-app#21). Forward-compatible: when the canonical
   injection ships, no code change required in notes-ui.
 
 - **PWA install limitation (known, deferred to Phase 2).** The PWA
