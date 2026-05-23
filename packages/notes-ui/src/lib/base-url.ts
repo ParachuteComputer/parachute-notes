@@ -21,14 +21,15 @@
  *
  *   The fix: Vite emits relative asset URLs (`base: ""` → `./assets/
  *   ...`) which the browser resolves against the document's URL, and
- *   the SPA reads its own mount from `window.location.pathname` at
- *   runtime. Same bundle, any mount.
+ *   the SPA reads its own mount at runtime — either from a meta tag
+ *   the host injects (canonical) or, as a fallback, by regex against
+ *   `window.location.pathname`. Same bundle, any mount.
  *
  * Detection contract:
  *
  *   `detectMountBase()` returns a path WITHOUT a trailing slash, ready
  *   to feed React Router's `basename` and to prefix OAuth callback
- *   URLs. Recognised mount shapes:
+ *   URLs. Recognised mount shapes (regex fallback):
  *
  *     - `/app/<slug>` — parachute-app hosts (the future-default)
  *     - `/notes`     — legacy notes-daemon host (preserved for
@@ -44,19 +45,29 @@
  *   Server/test environments without `window` return `/notes` — the
  *   legacy default — so tests that don't explicitly stub a pathname
  *   keep the pre-refactor behaviour.
+ */
+
+/**
+ * Detect the mount path the SPA is served under at runtime.
  *
- * Why not a `<base href>` or meta-tag contract:
+ * Two-tier strategy:
  *
- *   The cleaner architectural answer is a meta tag (or `<base>` tag)
- *   that parachute-app injects into served HTML, declaring the live
- *   mount. We considered it — parachute-app's `http-server.ts`
- *   already has a string-injection hook for the dev-reload script,
- *   so the seam exists. But shipping that would mean a coordinated
- *   parachute-app PR alongside this one, and Aaron's blocked NOW. The
- *   regex-from-pathname shape is contract-free (zero coordination with
- *   parachute-app) and covers every mount the ecosystem currently
- *   produces. If we later need to support arbitrary nested mounts
- *   (`/custom/path/notes/`), revisit then.
+ *   1. **Canonical** — read `<meta name="parachute-mount" content="/app/<name>">`
+ *      injected by parachute-app's static-serve. This is the load-bearing path
+ *      once parachute-app#NN ships. Apps read what the host explicitly told them;
+ *      no guessing.
+ *
+ *   2. **Interim fallback** — regex-detect against known parachute mount
+ *      patterns from `window.location.pathname`. Works without parachute-app
+ *      cooperation, but assumes the bundle knows the host's mount conventions.
+ *      Will phase out once tier 1 is universal.
+ *
+ * Returns a path-without-trailing-slash, suitable for React Router's basename
+ * and as a prefix for OAuth callback URLs.
+ *
+ * Future: this logic will move into `@openparachute/app-client`'s
+ * `getMountBase()` helper (issue NN). Apps consume that abstraction; this file
+ * exists until that lands.
  */
 
 /**
@@ -79,17 +90,39 @@ const MOUNT_PATTERNS: readonly RegExp[] = [
 const LEGACY_FALLBACK = "/notes" as const;
 
 /**
- * Detect the mount path the SPA is served under by parsing
- * `window.location.pathname`. Returns a path WITHOUT a trailing slash —
- * the shape React Router's `basename` and OAuth redirect URI building
- * both expect.
+ * Detect the mount path the SPA is served under at runtime.
  *
- * `pathname` overload exists for testability: tests can pass a path
- * directly without monkey-patching `window.location`.
+ * Two-tier resolution:
+ *
+ *   1. Check for `<meta name="parachute-mount" content="/app/<name>">`
+ *      injected by the host (canonical contract once parachute-app#NN ships).
+ *   2. Fall back to regex-matching `window.location.pathname` against the
+ *      known mount patterns.
+ *
+ * Returns a path WITHOUT a trailing slash — the shape React Router's
+ * `basename` and OAuth redirect URI building both expect.
+ *
+ * @param pathname  Optional pathname for the regex fallback. Tests pass this
+ *                  directly without monkey-patching `window.location`.
+ * @param doc       Optional Document for the meta-tag check. Tests inject a
+ *                  stub to exercise the canonical branch.
  */
-export function detectMountBase(pathname?: string): string {
+export function detectMountBase(pathname?: string, doc?: Document): string {
+  // 1. Canonical contract: read the meta tag parachute-app injects on serve.
+  //    Once parachute-app#NN ships, this is the load-bearing path.
+  if (typeof document !== "undefined" || doc !== undefined) {
+    const d = doc ?? document;
+    const meta = d.querySelector<HTMLMetaElement>('meta[name="parachute-mount"]');
+    const value = meta?.content?.trim();
+    if (value && value.startsWith("/")) {
+      return value.replace(/\/$/, "");
+    }
+  }
+
+  // 2. Fallback: regex-detect from window.location.pathname.
+  //    Interim until parachute-app#NN lands.
   const path = pathname ?? (typeof window === "undefined" ? null : window.location.pathname);
-  if (path === null || path === undefined) return LEGACY_FALLBACK;
+  if (path == null) return LEGACY_FALLBACK;
   for (const pattern of MOUNT_PATTERNS) {
     const match = pattern.exec(path);
     if (match?.[1]) return match[1];

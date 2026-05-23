@@ -83,6 +83,60 @@ describe("detectMountBase", () => {
     });
   });
 
+  describe("meta-tag canonical contract", () => {
+    // Tier 1 of detection: when parachute-app injects
+    // `<meta name="parachute-mount" content="/app/<name>">`, notes-ui reads it
+    // directly. No regex, no guessing. The host explicitly declared the mount;
+    // we believe it. Tracked at parachute-app#NN for the injection side.
+    const stubWith = (content: string | null | undefined, name = "parachute-mount") =>
+      ({
+        querySelector: (selector: string) => {
+          if (selector === `meta[name="${name}"]`) {
+            return content === null ? null : { content };
+          }
+          return null;
+        },
+      }) as unknown as Document;
+
+    it('reads from <meta name="parachute-mount" content="/app/notes"> when present', () => {
+      const doc = stubWith("/app/notes");
+      // Pathname says /notes (would trigger regex fallback), but meta wins.
+      expect(detectMountBase("/notes/anything", doc)).toBe("/app/notes");
+    });
+
+    it("ignores meta tag when content is empty", () => {
+      const doc = stubWith("");
+      expect(detectMountBase("/notes/x", doc)).toBe("/notes");
+    });
+
+    it("ignores meta tag when content doesn't start with /", () => {
+      const doc = stubWith("app/notes");
+      expect(detectMountBase("/notes/x", doc)).toBe("/notes");
+    });
+
+    it("ignores meta tag when name is not exactly parachute-mount", () => {
+      // Stub a doc where only `parachute-mount-other` matches; the real
+      // selector returns null and we fall through to regex.
+      const doc = stubWith("/app/wrong", "parachute-mount-other");
+      expect(detectMountBase("/notes/x", doc)).toBe("/notes");
+    });
+
+    it("strips trailing slash from meta tag content (/app/notes/ → /app/notes)", () => {
+      const doc = stubWith("/app/notes/");
+      expect(detectMountBase("/", doc)).toBe("/app/notes");
+    });
+
+    it("falls back to regex when meta tag is absent", () => {
+      const doc = stubWith(null);
+      expect(detectMountBase("/app/my-notes/x", doc)).toBe("/app/my-notes");
+    });
+
+    it("falls back to /notes when meta tag absent AND no pathname match", () => {
+      const doc = stubWith(null);
+      expect(detectMountBase("/", doc)).toBe("/notes");
+    });
+  });
+
   describe("detectMountBaseWithSlash", () => {
     it("appends a slash to the detected base", () => {
       expect(detectMountBaseWithSlash("/notes/")).toBe("/notes/");

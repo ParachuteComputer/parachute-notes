@@ -37,6 +37,12 @@
   (parachute-app default), `/app/<custom-slug>/` (renamed install),
   and any deep route under each.
 
+- **Amendment: meta-tag fast-path before regex fallback.** Adds meta-tag
+  fast-path to mount detection. Apps read `<meta name="parachute-mount">`
+  first; regex fallback handles the interim until parachute-app injects
+  the meta tag (tracked at NN). Forward-compatible: when the canonical
+  injection ships, no code change required in notes-ui.
+
 - **PWA install limitation (known, deferred to Phase 2).** The PWA
   manifest's `start_url`/`scope` and the service worker's
   `navigateFallback` are fixed at Vite build time — the spec doesn't
