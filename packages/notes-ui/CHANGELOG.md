@@ -1,7 +1,9 @@
 # Changelog — @openparachute/notes-ui
 
-## [0.1.0-rc.5] - 2026-05-23
+## [0.1.0] - 2026-05-23
 
+- **First stable release; promoted from rc.5.** Tagged `@latest` for
+  parachute-app bootstrap's bare-spec resolution.
 - **Fix: ship `meta.json` so parachute-app bootstrap can install.**
   parachute-app's auto-bootstrap path validates `@openparachute/notes-
   ui`'s tarball against its [meta-schema][meta-schema] and requires

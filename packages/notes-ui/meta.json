@@ -3,7 +3,7 @@
   "name": "notes",
   "displayName": "Notes",
   "tagline": "Notes PWA backed by your vault.",
-  "version": "0.1.0-rc.5",
+  "version": "0.1.0",
   "path": "/app/notes",
   "iconUrl": "icon.svg",
   "scopes_required": ["vault:*:read", "vault:*:write"],
