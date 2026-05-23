@@ -119,7 +119,7 @@ export function App() {
           (parachute-app with a renamed install). See `src/lib/base-url.ts`
           for the detector + the design rationale.
         */}
-        <BrowserRouter basename={detectMountBase() || undefined}>
+        <BrowserRouter basename={detectMountBase()}>
           <div className="min-h-dvh overflow-x-hidden bg-bg text-fg pb-16 md:pb-0">
             <Toaster />
             <UpdateBanner />

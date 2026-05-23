@@ -78,8 +78,11 @@ describe("detectMountBase", () => {
       // Implicit when called with no arg in a non-browser env. We can't
       // delete `window` from jsdom mid-test without breaking other tests,
       // so cover this branch via the explicit `undefined` path the function
-      // accepts.
-      expect(detectMountBase(undefined as unknown as string | undefined)).toBeDefined();
+      // accepts. jsdom's `document` has no `<meta name="parachute-mount">`
+      // injected (the test environment leaves the document bare), so the
+      // canonical tier returns null and we fall through to the legacy
+      // default.
+      expect(detectMountBase(undefined as unknown as string | undefined)).toBe("/notes");
     });
   });
 

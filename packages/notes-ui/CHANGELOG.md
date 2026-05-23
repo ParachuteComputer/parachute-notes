@@ -1,5 +1,33 @@
 # Changelog — @openparachute/notes-ui
 
+## [0.1.3] - 2026-05-23
+
+### Changed
+- `detectMountBase()`'s canonical (meta-tag) path now delegates to
+  `@openparachute/app-client`'s `getMountBase()` instead of parsing the
+  meta tag locally. The thin wrapper preserves the legacy `/notes`
+  fallback and keeps the existing `(pathname?, doc?)` signature so
+  existing callers' shapes are unchanged. The local regex fallback
+  stays in place for pathname-passing callers (`sw-bootstrap.ts`) —
+  app-client's helper intentionally does not read
+  `window.location.pathname`, so pathname-based detection remains a
+  notes-ui concern until every host injects the meta tag (tracked at
+  parachute-app#21, partially shipped in app#25). Closes notes#163.
+
+### Fixed
+- Removed unreachable `|| undefined` branch in `App.tsx`'s
+  `<BrowserRouter basename>`. `detectMountBase()` always returns a
+  non-empty string, so the fallback was dead (notes#162 nit).
+- Strengthened the SSR/no-window test in `base-url.test.ts` from
+  `.toBeDefined()` to `.toBe("/notes")` so the assertion actually
+  proves the legacy fallback shape (notes#162 nit).
+
+### Dependencies
+- Bumps `@openparachute/app-client` from `^0.1.0-rc.3` to
+  `^0.1.0-rc.4`. app-client rc.4 added the runtime tenancy helpers
+  (`getMountBase`, `getTenantId`, `getHubOrigin`, `getVaultUrl`) this
+  release consumes (parachute-app#27).
+
 ## [0.1.2] - 2026-05-23
 
 ### Fixed

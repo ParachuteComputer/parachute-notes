@@ -22,53 +22,42 @@
  *   The fix: Vite emits relative asset URLs (`base: ""` → `./assets/
  *   ...`) which the browser resolves against the document's URL, and
  *   the SPA reads its own mount at runtime — either from a meta tag
- *   the host injects (canonical) or, as a fallback, by regex against
- *   `window.location.pathname`. Same bundle, any mount.
+ *   the host injects (canonical, delegated to `@openparachute/app-
+ *   client`'s `getMountBase()`) or, for callers that pass an explicit
+ *   pathname (currently sw-bootstrap), via a regex fallback against
+ *   that pathname. Same bundle, any mount.
  *
  * Detection contract:
  *
  *   `detectMountBase()` returns a path WITHOUT a trailing slash, ready
  *   to feed React Router's `basename` and to prefix OAuth callback
- *   URLs. Recognised mount shapes (regex fallback):
+ *   URLs. Recognised mount shapes (regex fallback for pathname-based
+ *   callers):
  *
  *     - `/app/<slug>` — parachute-app hosts (the future-default)
  *     - `/notes`     — legacy notes-daemon host (preserved for
  *                       back-compat through notes-daemon's retirement)
  *
  *   Slug grammar matches parachute-app's `meta-schema.ts` `PATH_PATTERN`
- *   (single segment of `[a-z0-9][a-z0-9_-]*`). A pathname under a
- *   recognised mount returns the matching prefix; anything else falls
+ *   (single segment of `[a-z0-9][a-z0-9_-]*`). Anything else falls
  *   back to `/notes` so an unmounted load (operator types the bare
  *   origin) still degrades into the historical default rather than
  *   blanking the router.
  *
- *   Server/test environments without `window` return `/notes` — the
- *   legacy default — so tests that don't explicitly stub a pathname
- *   keep the pre-refactor behaviour.
+ *   Server/test environments without a `<meta name="parachute-mount">`
+ *   tag and without an explicit pathname return `/notes` — the legacy
+ *   default — so tests that don't explicitly stub a path keep the
+ *   pre-refactor behaviour.
+ *
+ *   Canonical path (meta-tag) delegates to `@openparachute/app-client`'s
+ *   `getMountBase()` so every Parachute app reads the runtime tenancy
+ *   contract through the same library. The local regex fallback stays
+ *   here for the pathname-passing callers (sw-bootstrap) — app-client's
+ *   helper does not take a pathname; it reads the global `document`
+ *   and returns `null` when no tag is present.
  */
 
-/**
- * Detect the mount path the SPA is served under at runtime.
- *
- * Two-tier strategy:
- *
- *   1. **Canonical** — read `<meta name="parachute-mount" content="/app/<name>">`
- *      injected by parachute-app's static-serve. This is the load-bearing path
- *      once parachute-app#21 ships. Apps read what the host explicitly told them;
- *      no guessing.
- *
- *   2. **Interim fallback** — regex-detect against known parachute mount
- *      patterns from `window.location.pathname`. Works without parachute-app
- *      cooperation, but assumes the bundle knows the host's mount conventions.
- *      Will phase out once tier 1 is universal.
- *
- * Returns a path-without-trailing-slash, suitable for React Router's basename
- * and as a prefix for OAuth callback URLs.
- *
- * Future: this logic will move into `@openparachute/app-client`'s
- * `getMountBase()` helper (issue parachute-app#22). Apps consume that abstraction; this file
- * exists until that lands.
- */
+import { getMountBase } from "@openparachute/app-client";
 
 /**
  * Recognised mount-prefix patterns. Order matters — most specific first.
@@ -94,33 +83,34 @@ const LEGACY_FALLBACK = "/notes" as const;
  *
  * Two-tier resolution:
  *
- *   1. Check for `<meta name="parachute-mount" content="/app/<name>">`
- *      injected by the host (canonical contract once parachute-app#21 ships).
- *   2. Fall back to regex-matching `window.location.pathname` against the
- *      known mount patterns.
+ *   1. **Canonical** — `getMountBase()` from `@openparachute/app-client`
+ *      reads `<meta name="parachute-mount" content="/app/<name>">` from
+ *      the host-supplied document. This is the load-bearing path once
+ *      parachute-app injects the meta tag (shipped in app#25).
+ *   2. **Pathname fallback** — when a `pathname` is supplied (sw-bootstrap
+ *      passes one for the SW gate), regex-match against the recognised
+ *      mount patterns. Without a pathname and without a meta tag, fall
+ *      through to the legacy `/notes` default.
  *
  * Returns a path WITHOUT a trailing slash — the shape React Router's
  * `basename` and OAuth redirect URI building both expect.
  *
- * @param pathname  Optional pathname for the regex fallback. Tests pass this
- *                  directly without monkey-patching `window.location`.
- * @param doc       Optional Document for the meta-tag check. Tests inject a
- *                  stub to exercise the canonical branch.
+ * @param pathname  Optional pathname for the regex fallback. Tests
+ *                  (and `sw-bootstrap.ts`) pass this directly without
+ *                  monkey-patching `window.location`.
+ * @param doc       Optional Document for the meta-tag check. Tests
+ *                  inject a stub to exercise the canonical branch.
  */
 export function detectMountBase(pathname?: string, doc?: Document): string {
-  // 1. Canonical contract: read the meta tag parachute-app injects on serve.
-  //    Once parachute-app#21 ships, this is the load-bearing path.
-  if (typeof document !== "undefined" || doc !== undefined) {
-    const d = doc ?? document;
-    const meta = d.querySelector<HTMLMetaElement>('meta[name="parachute-mount"]');
-    const value = meta?.content?.trim();
-    if (value && value.startsWith("/")) {
-      return value.replace(/\/$/, "");
-    }
-  }
+  // 1. Canonical contract: meta tag, via app-client. When a `doc` stub
+  //    is supplied, forward it; otherwise app-client reads the global
+  //    document. Returns `null` when no tag is present.
+  const fromMeta = getMountBase({ doc });
+  if (fromMeta) return fromMeta;
 
-  // 2. Fallback: regex-detect from window.location.pathname.
-  //    Interim until parachute-app#21 lands.
+  // 2. Pathname fallback. Preserved locally because app-client's helper
+  //    intentionally never reads `window.location.pathname` — pathname-
+  //    based detection is interim until every host injects the meta tag.
   const path = pathname ?? (typeof window === "undefined" ? null : window.location.pathname);
   if (path == null) return LEGACY_FALLBACK;
   for (const pattern of MOUNT_PATTERNS) {
