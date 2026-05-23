@@ -1,5 +1,57 @@
 # Changelog — @openparachute/notes-ui
 
+## [0.1.2] - 2026-05-23
+
+### Fixed
+- Service-worker registration now gates on the runtime mount matching
+  the build-time vite base. Resolves the OAuth-callback breakage and
+  MIME errors that hit operators running notes-ui under parachute-app
+  at the canonical `/app/notes/` mount. The previous build auto-
+  registered the SW unconditionally at the page's current scope; the
+  precache table was built for `/notes/` so workbox served HTML for
+  what should have been JS modules and JSON manifests:
+
+  ```
+  Uncaught (in promise) non-precached-url: non-precached-url ::
+      [{"url":"/notes/index.html"}]
+  Failed to load module script: Expected JavaScript-or-Wasm module,
+      got "text/html"
+  Manifest: Line: 1, column: 1, Syntax error.
+  ```
+
+  The fix:
+    - New `src/lib/sw-bootstrap.ts` exports `shouldRegisterServiceWorker()`
+      and `cleanupStaleServiceWorker()`. The gate compares the
+      build-time vite base (`import.meta.env.BASE_URL` / `VITE_BASE_PATH`)
+      against `detectMountBase()` and only registers when they match.
+    - `UpdateBanner` splits the `useRegisterSW` call into an inner
+      component that only renders when the gate is open — React hooks
+      can't be conditional within a single component, but conditional
+      *rendering* is fine.
+    - `main.tsx` fires `cleanupStaleServiceWorker()` on boot to
+      unregister any `/notes/`-scoped SW left over from a pre-0.1.2
+      install when the bundle is now being served at a different mount.
+      Operators auto-recover on first page load — no DevTools manual
+      cleanup needed.
+    - `vite.config.ts` declares `injectRegister: false` explicitly,
+      documenting that app code is the only registration path (defensive
+      — vite-plugin-pwa v1's default already skips auto-inject when
+      `useRegisterSW` is used, but the explicit declaration makes the
+      contract grep-able).
+- `meta.json`'s `version` field synced to the package version (was
+  stuck at `0.1.0` through 0.1.1). Cosmetic — `meta.json`'s `version`
+  is informational; parachute-app reads `package.json` for install
+  resolution — but worth keeping accurate.
+
+### Known limitations
+- PWA "Add to Home Screen" install still requires a custom build with
+  `VITE_BASE_PATH=/app/<name>` when running under parachute-app at a
+  non-default mount. The default bundle targets the daemon-era
+  `/notes/` scope for back-compat; in-browser use works at any mount
+  from the default bundle (just no installable PWA). A future
+  parachute-app manifest-rewrite hook will lift this — tracked
+  separately (see 0.1.1 entry below for the original limitation note).
+
 ## [0.1.1] - 2026-05-23
 
 - **Fix: runtime mount detection — same built bundle works at any

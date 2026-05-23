@@ -88,6 +88,17 @@ export default defineConfig({
     infoEndpointPlugin({ basePath, ...serviceInfo }),
     VitePWA({
       registerType: "prompt",
+      // App code is the only registration path: `UpdateBanner` calls
+      // `useRegisterSW` (gated by `shouldRegisterServiceWorker()` which
+      // compares the runtime mount to the build-time vite base). Tell
+      // vite-plugin-pwa NOT to auto-inject a registration script into
+      // `index.html` — otherwise that script would register the SW
+      // unconditionally at the page's current scope, which is exactly
+      // the bug we just fixed for parachute-app installs (notes 0.1.2,
+      // 2026-05-23). Belt + suspenders: even though vite-plugin-pwa's
+      // default in v1 is to skip auto-inject when `useRegisterSW` is
+      // used, declaring it explicitly here documents the contract.
+      injectRegister: false,
       includeAssets: ["icon.svg", "apple-touch-icon-180x180.png", "favicon.ico"],
       manifest: buildPwaManifest(basePath),
       workbox: {
