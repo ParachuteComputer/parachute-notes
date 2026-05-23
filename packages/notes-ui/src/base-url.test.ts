@@ -78,8 +78,11 @@ describe("detectMountBase", () => {
       // Implicit when called with no arg in a non-browser env. We can't
       // delete `window` from jsdom mid-test without breaking other tests,
       // so cover this branch via the explicit `undefined` path the function
-      // accepts.
-      expect(detectMountBase(undefined as unknown as string | undefined)).toBeDefined();
+      // accepts. jsdom's `document` has no `<meta name="parachute-mount">`
+      // injected (the test environment leaves the document bare), so the
+      // canonical tier returns null and we fall through to the legacy
+      // default.
+      expect(detectMountBase(undefined as unknown as string | undefined)).toBe("/notes");
     });
   });
 
@@ -87,7 +90,7 @@ describe("detectMountBase", () => {
     // Tier 1 of detection: when parachute-app injects
     // `<meta name="parachute-mount" content="/app/<name>">`, notes-ui reads it
     // directly. No regex, no guessing. The host explicitly declared the mount;
-    // we believe it. Tracked at parachute-app#NN for the injection side.
+    // we believe it. Injection side: parachute-app#25 (merged).
     const stubWith = (content: string | null | undefined, name = "parachute-mount") =>
       ({
         querySelector: (selector: string) => {
