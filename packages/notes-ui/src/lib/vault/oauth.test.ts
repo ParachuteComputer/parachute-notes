@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   PendingApprovalError,
   beginOAuth,
@@ -167,28 +167,49 @@ describe("beginOAuth", () => {
   });
 });
 
-describe("redirectUriForOrigin under VITE_BASE_PATH", () => {
-  afterEach(() => {
-    vi.unstubAllEnvs();
-  });
-
-  it("defaults to {origin}/oauth/callback when base is /", () => {
-    vi.stubEnv("BASE_URL", "/");
-    expect(redirectUriForOrigin("http://localhost:3000")).toBe(
-      "http://localhost:3000/oauth/callback",
-    );
-  });
-
-  it("includes the base path when Notes is mounted under a sub-path", () => {
-    vi.stubEnv("BASE_URL", "/notes/");
+describe("redirectUriForOrigin under runtime mount detection", () => {
+  // detectMountBase() reads from window.location.pathname (not
+  // import.meta.env.BASE_URL — that was the pre-2026-05-23 shape). The
+  // OAuth tests above default-stub the path to `/notes/` in beforeEach,
+  // matching the legacy-daemon mount. These tests drive each recognised
+  // mount path through the redirect-URI derivation. jsdom forbids
+  // cross-origin replaceState so the path is changed in-place; the
+  // origin passed to `redirectUriForOrigin` is the externally visible
+  // URL the SPA was loaded from (independent of the test's actual origin).
+  it("includes the legacy /notes mount when served from /notes/...", () => {
+    window.history.replaceState({}, "", "/notes/");
     expect(redirectUriForOrigin("http://host.example")).toBe(
       "http://host.example/notes/oauth/callback",
     );
   });
 
-  it("strips a single trailing slash on the origin and the base", () => {
-    vi.stubEnv("BASE_URL", "/notes/");
+  it("includes the parachute-app default mount when served from /app/notes/...", () => {
+    window.history.replaceState({}, "", "/app/notes/");
+    expect(redirectUriForOrigin("http://host.example")).toBe(
+      "http://host.example/app/notes/oauth/callback",
+    );
+  });
+
+  it("includes a renamed-install slug when served from /app/<slug>/...", () => {
+    window.history.replaceState({}, "", "/app/my-notes/");
+    expect(redirectUriForOrigin("http://host.example")).toBe(
+      "http://host.example/app/my-notes/oauth/callback",
+    );
+  });
+
+  it("strips a single trailing slash on the origin", () => {
+    window.history.replaceState({}, "", "/notes/");
     expect(redirectUriForOrigin("http://host.example/")).toBe(
+      "http://host.example/notes/oauth/callback",
+    );
+  });
+
+  it("falls back to /notes/oauth/callback for unrecognised mounts (defensive)", () => {
+    // Bare origin or any unrecognised pathname falls through to the legacy
+    // default — better than blanking the redirect URI. Real-world mounts
+    // are always one of the cases above.
+    window.history.replaceState({}, "", "/");
+    expect(redirectUriForOrigin("http://host.example")).toBe(
       "http://host.example/notes/oauth/callback",
     );
   });

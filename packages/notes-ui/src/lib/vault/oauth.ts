@@ -10,9 +10,13 @@
  *     distinct from app-client's per-app in-memory cache because Notes
  *     was registered before app-client existed and we want to reuse
  *     historical localStorage entries rather than re-DCR on first load.
- *   - `redirectUriForOrigin` derived from `import.meta.env.BASE_URL` so
- *     a hub-mounted Notes (`/notes/`) and a parachute-app-mounted Notes
- *     (`/app/notes/`) both land back on a URL the SPA actually serves.
+ *   - `redirectUriForOrigin` derived from `detectMountBase()` so
+ *     a hub-mounted Notes (`/notes/`), a parachute-app-mounted Notes
+ *     (`/app/notes/`), and a renamed-install Notes (`/app/<slug>/`)
+ *     all land back on a URL the SPA actually serves. The detector
+ *     reads from `window.location.pathname` at call time — the same
+ *     built bundle picks up the correct mount regardless of where
+ *     it's served. See `src/lib/base-url.ts` for the contract.
  *   - Caller-supplied `params` (e.g. `vault=<name>` hint from the vault
  *     popover) appended without overwriting standard OAuth/PKCE params.
  *
@@ -31,6 +35,7 @@ import {
   generateState,
   storedFromTokenResponse,
 } from "@openparachute/app-client";
+import { detectMountBase } from "../base-url";
 import { discoverAuthServer, registerClient } from "./discovery";
 import {
   clearCachedClientId,
@@ -55,14 +60,21 @@ const REDIRECT_PATH = "/oauth/callback";
 // vocabulary so the hub can render an accurate consent screen.
 export const DEFAULT_SCOPE: TokenScope = "vault:read vault:write";
 
-// Notes is mounted under `import.meta.env.BASE_URL` (defaults to `/`, can be
-// `/notes/` when the hub portal path-routes us, or `/app/notes/` once
-// parachute-app installs it). The OAuth callback must include that prefix so
-// the authorization server bounces the browser back to a URL the SPA actually
-// serves.
+// Notes can be mounted at several paths depending on the host:
+//
+//   - `/notes/`          (legacy notes-daemon)
+//   - `/app/notes/`      (parachute-app default)
+//   - `/app/<slug>/`     (parachute-app with a renamed install)
+//
+// The OAuth callback must include the live mount prefix so the
+// authorization server bounces the browser back to a URL the SPA
+// actually serves. `detectMountBase()` reads it from
+// `window.location.pathname` at call time — works for every mount
+// shape from the same built bundle. Returns the mount path WITHOUT a
+// trailing slash; concatenated with `REDIRECT_PATH` (which carries its
+// own leading slash) to form a clean callback path.
 function basePathPrefix(): string {
-  const b = import.meta.env.BASE_URL ?? "/";
-  return b.replace(/\/$/, "");
+  return detectMountBase();
 }
 
 export function redirectUriForOrigin(origin: string = window.location.origin): string {

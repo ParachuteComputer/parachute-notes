@@ -12,10 +12,36 @@ import { buildPwaManifest } from "./src/pwa-manifest";
 // Host header — useful when reaching the dev server over a tailnet. Off by default.
 const devExposure = process.env.VITE_EXPOSE === "true";
 
-// Notes is one of N frontends mounted under a shared root: the CLI hub page
-// owns `/`, and each frontend lives under its own slug. Default to `/notes`
-// here so dev, build, and `parachute start notes` all agree.
-// Override with VITE_BASE_PATH=/ if you want the legacy stand-alone shape.
+// Notes is one of N frontends in the ecosystem. Two things share the
+// "where does Notes live?" concept and they no longer agree by default:
+//
+//   - `basePath` (below) is the *advertised dev/preview mount* — it
+//     pins the dev server to `/notes/`, scopes the PWA manifest, and
+//     populates `services.json` / `.parachute/info` so `parachute
+//     start notes` works under the legacy daemon shape. Override with
+//     VITE_BASE_PATH=/ for the stand-alone shape (no path prefix).
+//
+//   - The bundle's *runtime* mount is detected at load time via
+//     `detectMountBase()` in `src/lib/base-url.ts` (reads
+//     `window.location.pathname`). That's how the same built `dist/`
+//     can serve at `/notes/` (legacy daemon), `/app/notes/`
+//     (parachute-app default), or `/app/<custom-slug>/` (parachute-app
+//     with a renamed install) without a rebuild.
+//
+// The big shift (2026-05-23, this commit): `base: ""` below tells Vite
+// to emit RELATIVE asset URLs (`./assets/...`) in the built
+// `index.html` instead of absolute (`/notes/assets/...`). The browser
+// resolves them against the document's URL, so wherever the bundle is
+// served, assets resolve correctly. React Router's basename then comes
+// from `detectMountBase()` not `import.meta.env.BASE_URL`.
+//
+// One known limitation: the PWA manifest's `start_url`/`scope` are
+// fixed at build time (the spec doesn't support runtime values without
+// server-side rewriting). The PWA install therefore launches under the
+// build-time `basePath` (default `/notes/`). Operators who want PWA
+// install at a non-default mount must build with VITE_BASE_PATH set
+// to that mount. Documented in CHANGELOG; revisit when parachute-app
+// grows a manifest-rewrite hook.
 const basePath = normalizeBase(process.env.VITE_BASE_PATH ?? "/notes");
 
 const DISPLAY_NAME = "Notes";
@@ -44,7 +70,11 @@ function normalizeBase(input: string): string {
 }
 
 export default defineConfig({
-  base: basePath,
+  // Relative-mode asset URLs (`./assets/...`) so the same built bundle
+  // works at any mount path. See the long comment above `basePath` for
+  // the runtime mount detection that replaces `import.meta.env.BASE_URL`
+  // as the source of truth for the router basename + OAuth callback path.
+  base: "",
   plugins: [
     react(),
     tailwindcss(),

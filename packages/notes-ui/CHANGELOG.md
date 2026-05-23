@@ -1,5 +1,59 @@
 # Changelog — @openparachute/notes-ui
 
+## [0.1.1] - 2026-05-23
+
+- **Fix: runtime mount detection — same built bundle works at any
+  mount path.** The 0.1.0 bundle baked `/notes/` into asset URLs and
+  the React Router basename at Vite build time, so parachute-app
+  installs (which mount UIs at `/app/<slug>/`) loaded the bundle but
+  immediately broke:
+
+  ```
+  <Router basename="/notes"> is not able to match the URL "/app/notes"
+  because it does not start with the basename
+  ```
+
+  OAuth also 401'd because the DCR client registered with the wrong
+  redirect URI (`/notes/oauth/callback` instead of the live
+  `/app/notes/oauth/callback`).
+
+  The fix:
+    - Vite `base: ""` emits **relative** asset URLs (`./assets/...`,
+      `./manifest.webmanifest`) in the built `index.html`. Browser
+      resolves them against the document URL, so assets load from any
+      mount.
+    - New `src/lib/base-url.ts` exports `detectMountBase()` — reads
+      `window.location.pathname` at runtime to identify the mount
+      prefix. Recognises `/app/<slug>` (parachute-app's
+      single-segment slug grammar, matching `meta-schema`'s
+      PATH_PATTERN) and `/notes` (legacy notes-daemon mount), and
+      falls back to `/notes` for unrecognised paths.
+    - `BrowserRouter`'s `basename` and `oauth.basePathPrefix()` both
+      switch from `import.meta.env.BASE_URL` to `detectMountBase()`,
+      so router matching and the OAuth callback URL track the live
+      mount automatically.
+
+  Same `dist/` now works at `/notes/` (legacy daemon), `/app/notes/`
+  (parachute-app default), `/app/<custom-slug>/` (renamed install),
+  and any deep route under each.
+
+- **Amendment: meta-tag fast-path before regex fallback.** Adds meta-tag
+  fast-path to mount detection. Apps read `<meta name="parachute-mount">`
+  first; regex fallback handles the interim until parachute-app injects
+  the meta tag (tracked at parachute-app#21). Forward-compatible: when the canonical
+  injection ships, no code change required in notes-ui.
+
+- **PWA install limitation (known, deferred to Phase 2).** The PWA
+  manifest's `start_url`/`scope` and the service worker's
+  `navigateFallback` are fixed at Vite build time — the spec doesn't
+  support runtime values without server-side rewriting. The default
+  build keeps `/notes/` as the PWA mount; operators who install
+  Notes at a non-default mount and want PWA "Add to Home Screen" to
+  open the right path must build with `VITE_BASE_PATH=/app/<slug>`.
+  In-browser use (no PWA install) works at any mount from a single
+  build. A future parachute-app manifest-rewrite hook would lift
+  this — tracked separately.
+
 ## [0.1.0] - 2026-05-23
 
 - **First stable release; promoted from rc.5.** Tagged `@latest` for

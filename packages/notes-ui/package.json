@@ -1,6 +1,6 @@
 {
   "name": "@openparachute/notes-ui",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": false,
   "type": "module",
   "description": "Parachute Notes UI bundle — the SPA installed under parachute-app as the canonical first app. No daemon, no module surface; just the built dist/.",

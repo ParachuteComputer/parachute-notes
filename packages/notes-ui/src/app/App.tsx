@@ -6,6 +6,7 @@ import { TextSizeShortcutsMount } from "@/components/TextSizeControl";
 import { Toaster } from "@/components/Toaster";
 import { UpdateBanner } from "@/components/UpdateBanner";
 import { VaultStatusBanner } from "@/components/VaultStatusBanner";
+import { detectMountBase } from "@/lib/base-url";
 import { applyTextSize, readStoredTextSize } from "@/lib/text-size";
 import { useVaultStore } from "@/lib/vault";
 import { useCrossTabVaultSync } from "@/lib/vault/cross-tab-sync";
@@ -111,7 +112,14 @@ export function App() {
         <ReachabilityProbeMount />
         <SchemaAuditRunnerMount />
         <TextSizeShortcutsMount />
-        <BrowserRouter basename={import.meta.env.BASE_URL.replace(/\/$/, "") || undefined}>
+        {/*
+          Mount-agnostic basename: detected at runtime from window.location
+          so the same built bundle works at `/notes/` (legacy daemon),
+          `/app/notes/` (parachute-app default), or `/app/<custom-slug>/`
+          (parachute-app with a renamed install). See `src/lib/base-url.ts`
+          for the detector + the design rationale.
+        */}
+        <BrowserRouter basename={detectMountBase() || undefined}>
           <div className="min-h-dvh overflow-x-hidden bg-bg text-fg pb-16 md:pb-0">
             <Toaster />
             <UpdateBanner />
