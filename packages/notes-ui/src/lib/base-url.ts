@@ -125,7 +125,7 @@ export function detectMountBase(pathname?: string, doc?: Document): string {
  * for building absolute URLs (e.g. PWA manifest start_url, OAuth
  * callback construction). `/app/notes` → `/app/notes/`.
  */
-export function detectMountBaseWithSlash(pathname?: string): string {
-  const base = detectMountBase(pathname);
+export function detectMountBaseWithSlash(pathname?: string, doc?: Document): string {
+  const base = detectMountBase(pathname, doc);
   return base.endsWith("/") ? base : `${base}/`;
 }
