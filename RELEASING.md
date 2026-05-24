@@ -1,37 +1,77 @@
 # Releasing
 
-The `parachute-notes` repo is a monorepo with two publishable packages:
+The `parachute-notes` repo is a monorepo. Only **one** package is published from CI:
 
 - `@openparachute/notes-ui` — the UI bundle (in `packages/notes-ui/`), installed under parachute-app as the canonical first app. Ships `meta.json` alongside `dist/` so parachute-app's bootstrap validator accepts the tarball (added rc.5; see [meta-schema][meta-schema]).
-- `@openparachute/notes` — the legacy module daemon (in `packages/notes-daemon/`), **deprecated as of rc.2** in favor of installing notes-ui via parachute-app
+
+The sibling package `@openparachute/notes` (the daemon in `packages/notes-daemon/`) is **deprecated as of 2026-05-22** ([DEPRECATED.md](./packages/notes-daemon/DEPRECATED.md)) and **does not ship from CI**. Notes-as-UI is the future; notes-daemon is being archived in phases per the workspace [CLAUDE.md](https://github.com/ParachuteComputer/ParachuteComputer/blob/main/CLAUDE.md). If a notes-daemon rc must ship for a legacy operator, it is still publishable manually via `cd packages/notes-daemon && npm publish --tag rc`, but the deprecation arc means new shipping discipline (this workflow) does not cover it.
 
 [meta-schema]: https://github.com/ParachuteComputer/parachute-app/blob/main/packages/app-host/src/meta-schema.ts
 
 The workspace root (`@openparachute/notes-monorepo`) is intentionally `private: true` and should NEVER publish.
 
-## Publish workflow
+## Tag-triggered CI
 
-**To publish a specific package:**
+Releases of `@openparachute/notes-ui` are automated via [`.github/workflows/release.yml`](./.github/workflows/release.yml). Pushing a git tag of the right shape triggers CI which:
 
-```bash
-# From repo root
-npm publish --workspace @openparachute/notes-ui --tag rc
-npm publish --workspace @openparachute/notes --tag rc
+1. Runs `bun run typecheck` + `bun run test` (in `packages/notes-ui/`).
+2. Publishes `@openparachute/notes-ui` to npm with provenance attestation (Trusted Publishing via OIDC — no `NPM_TOKEN`).
 
-# OR cd into the package
-cd packages/notes-ui && npm publish --tag rc
-cd packages/notes-daemon && npm publish --tag rc
+### Tag conventions
+
+Per [parachute-patterns governance rule 2](https://github.com/ParachuteComputer/parachute-patterns/blob/main/patterns/governance.md):
+
+| Tag shape | Example | npm `dist-tag` |
+|---|---|---|
+| `vX.Y.Z-rc.N` | `v0.1.4-rc.1` | `rc` |
+| `vX.Y.Z` | `v0.1.4` | `latest` |
+
+The workflow auto-detects rc vs stable from the tag string (`-rc.` substring). The version in `packages/notes-ui/package.json` MUST match the tag (minus the `v` prefix) — CI hard-fails otherwise.
+
+### For an rc bump (each code-touching PR merge)
+
+After your PR merges to `main` with a bumped `rc.N` in `packages/notes-ui/package.json`:
+
+```sh
+git fetch && git checkout main && git pull --ff-only
+VERSION="v$(node -p "require('./packages/notes-ui/package.json').version")"
+git tag "$VERSION"
+git push origin "$VERSION"
 ```
 
-The daemon's build copies notes-ui's `dist/` into its own, so publish `notes-ui` BEFORE the daemon if both are going out in the same session and the daemon's `dist/` needs to reflect a fresh notes-ui build.
+CI takes over from there — watch the run at [Actions](https://github.com/ParachuteComputer/parachute-notes/actions).
 
-**Don't run `npm publish` from the repo root without `--workspace`** — npm would try to publish `@openparachute/notes-monorepo` (the workspace root). That's blocked by `private: true` as a safety net.
+### Promoting an rc chain to stable
+
+When the rc chain is ready to release:
+
+1. Open a PR that drops the `-rc.N` suffix from `packages/notes-ui/package.json` (e.g. `0.1.4-rc.3` → `0.1.4`).
+2. Reviewer + merge as usual.
+3. Tag the merged commit with the bare version: `git tag v0.1.4 && git push origin v0.1.4`.
+4. CI publishes with `dist-tag=latest`.
+
+### Doc-only PRs
+
+Per governance, doc-only PRs are EXEMPT from rc.N bumping — they merge without a version bump and get picked up by the next code-touching PR's rc bump (or by the stable promotion, whichever comes first). Don't fragment a release into many patch bumps mid-validation.
+
+If you DO need to ship a doc-only fix outside an active rc chain (i.e. main is on a stable version with no rc.N in flight), bump the next patch (`0.1.3` → `0.1.4`), tag, ship.
+
+## One-time setup (operator)
+
+Before the workflow can publish, this repo needs an **npm Trusted Publisher** rule. Log into npmjs.com → package `@openparachute/notes-ui` → Settings → Trusted Publishers → "Add a new publisher" → choose **GitHub Actions**. Fill:
+
+- Organization: `ParachuteComputer`
+- Repository name: `parachute-notes`
+- Workflow filename: `release.yml`
+- Environment name: (leave blank)
+
+No `NPM_TOKEN` secret needed — the workflow uses OIDC.
 
 ## Workspace dependencies must be concrete in the published manifest
 
-If a publishable package (notes-ui, notes-daemon) depends on a sibling workspace package or any sibling-published package (e.g. `@openparachute/app-client` from the parachute-app repo), the dependency in its `package.json` MUST be a concrete semver (e.g. `"^0.1.0-rc.3"`) — NEVER `workspace:*` or `link:...`.
+If `notes-ui` depends on any sibling-published package (e.g. `@openparachute/app-client` from the parachute-app repo), the dependency in its `package.json` MUST be a concrete semver (e.g. `"^0.1.0-rc.3"`) — NEVER `workspace:*` or `link:...`.
 
-**Reason**: `npm publish` does NOT rewrite the `workspace:` protocol at publish time. (Bun's `bun publish` does, but we can't bind the publish workflow to a single tool.) `link:` is a local-dev-only protocol that always serializes as an unresolvable string in a published tarball. Either form leaks into the npm-served manifest and breaks every install:
+**Reason**: `npm publish` does NOT rewrite the `workspace:` protocol at publish time. (Bun's `bun publish` does, but CI uses `npm publish` for Trusted Publishing OIDC.) `link:` is a local-dev-only protocol that always serializes as an unresolvable string in a published tarball. Either form leaks into the npm-served manifest and breaks every install:
 
 ```
 error: Workspace dependency "@openparachute/app-client" not found
@@ -41,15 +81,15 @@ This bit us on `@openparachute/notes-ui@0.1.0-rc.3` (and `@openparachute/app@0.2
 
 **To bump a sibling dep** (e.g. when app-client publishes a new rc):
 
-1. Update the consumer's `package.json` to the new concrete version (e.g. `"^0.1.0-rc.4"`).
+1. Update notes-ui's `package.json` to the new concrete version (e.g. `"^0.1.0-rc.4"`).
 2. `bun install` to refresh the lockfile.
 3. Run typecheck + tests locally.
-4. Bump the consumer's own version + CHANGELOG entry referencing the dep bump.
-5. Publish the consumer.
+4. Bump notes-ui's own `rc.N` + CHANGELOG entry referencing the dep bump.
+5. Merge, tag, push (CI publishes).
 
 **Local dev still works** with concrete semver — Bun's resolver matches sibling packages by name regardless of the version string, falling back to the registry only when no sibling matches.
 
-**Verify before publishing**:
+**Verify before tagging**:
 
 ```bash
 cd packages/notes-ui && npm pack --dry-run
@@ -60,17 +100,34 @@ cd packages/notes-ui && npm pack --dry-run
 # bootstrap validator rejects tarballs without it.
 ```
 
-If the dry-run shows `workspace:` or `link:`, fix the package.json before publishing. If `meta.json` is missing, ensure it's listed in the `files` array of `packages/notes-ui/package.json`.
+If the dry-run shows `workspace:` or `link:`, fix the package.json before tagging. If `meta.json` is missing, ensure it's listed in the `files` array of `packages/notes-ui/package.json`.
 
-## RC vs stable
+## Verifying a release
 
-Pre-1.0, every code-touching publish bumps `rc.N`:
-- `npm publish --workspace @openparachute/notes-ui --tag rc` ships to `@rc`
-- `npm publish --workspace @openparachute/notes-ui --tag latest` promotes to `@latest` (only after Aaron explicitly says ready)
+```sh
+npm view @openparachute/notes-ui@<version> dist.tarball
+npm view @openparachute/notes-ui dist-tags
+```
 
-## Verifying
+The npm tarball page links to the GitHub Actions run that produced it (provenance attestation).
+
+## Rolling back
+
+There's no "unpublish" path for npm (strict 72-hour unpublish policy you should avoid anyway). To roll back, cut a new rc/patch from a known-good commit reverting the bad change, tag, ship.
+
+## Troubleshooting
+
+- **Workflow doesn't trigger**: confirm the tag matches the workflow's `on.push.tags` pattern (`v[0-9]+.[0-9]+.[0-9]+` or `v[0-9]+.[0-9]+.[0-9]+-rc.[0-9]+`).
+- **`version mismatch` error in publish-npm**: `packages/notes-ui/package.json` version differs from the tag. Re-tag the correct commit.
+- **`npm ERR! 403 You do not have permission to publish`**: Trusted Publisher rule on npm doesn't match this workflow. Verify org/repo/workflow filename are exactly `ParachuteComputer` / `parachute-notes` / `release.yml`. If the workflow file was renamed, the rule needs updating on npm.
+- **`npm ERR! 401 Unauthorized` with no OIDC token**: the workflow is missing `permissions: id-token: write` at the job level. Verify the YAML.
+
+## Manual fallback (notes-daemon legacy)
+
+If a notes-daemon (`@openparachute/notes`) publish is genuinely needed during the deprecation window:
 
 ```bash
-npm view @openparachute/notes-ui dist-tags --json
-npm view @openparachute/notes dist-tags --json
+cd packages/notes-daemon && npm publish --tag rc
 ```
+
+There is no CI path for this; Aaron handles 2FA from his own shell. Notes-daemon is on the path to archival — don't add CI for it.
