@@ -71,6 +71,8 @@ No `NPM_TOKEN` secret needed — the workflow uses OIDC.
 
 If `notes-ui` depends on any sibling-published package (e.g. `@openparachute/app-client` from the parachute-app repo), the dependency in its `package.json` MUST be a concrete semver (e.g. `"^0.1.0-rc.3"`) — NEVER `workspace:*` or `link:...`.
 
+(Side note: `packages/notes-daemon/package.json` carries `"@openparachute/notes-ui": "workspace:*"` as a devDependency. That's intentional and harmless — notes-daemon is NOT published from this CI workflow, so its `workspace:*` reference never reaches an npm tarball. It only matters for in-repo dev where the workspace resolver does the right thing. If notes-daemon ever returns to CI publish, this would need to flip to concrete semver too.)
+
 **Reason**: `npm publish` does NOT rewrite the `workspace:` protocol at publish time. (Bun's `bun publish` does, but CI uses `npm publish` for Trusted Publishing OIDC.) `link:` is a local-dev-only protocol that always serializes as an unresolvable string in a published tarball. Either form leaks into the npm-served manifest and breaks every install:
 
 ```
